@@ -315,5 +315,13 @@ json.dump({"labels": LABELS, "updated": DATA.get("updated"), "line": GROUP[0]["l
            "shields": [{"name": s["name"], "ring": s["ring"], "unit": s["unit"], "color": s.get("color"), "total": s["total"],
                         "stations": [[x["name"], x["from"], x["to"]] for x in s["stations"]]} for s in GROUP]},
           open(f"renders/{NAME}-labels.json", "w"), ensure_ascii=False, indent=1)
+# модель для просмотра в браузере (diorama.html): та же сцена, без камеры и света
+try:
+    bpy.ops.export_scene.gltf(filepath=os.path.abspath(f"renders/{NAME}.glb"), export_format="GLB", export_cameras=False,
+                              export_lights=False, export_apply=True, export_yup=True)
+except Exception as ex:
+    print("glb export failed:", ex)
+json.dump({"center": [cfg["lng"], cfg["lat"]], "L": cfg["L"], "W": cfg["W"], "cen": [CEN.x, CEN.y], "ax": [AX.x, AX.y], "side": SIDE,
+           "labels": LABELS}, open(f"renders/{NAME}-scene.json", "w"), ensure_ascii=False)
 bpy.ops.render.render(write_still=True)
 print("rendered", r.filepath)

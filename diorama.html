@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Диорама — щиты метро СПб</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;600&display=swap">
+<style>
+  html, body { margin: 0; height: 100%; background: #c9cdcf; font: 14px/1.4 "Golos Text", system-ui, sans-serif; color: #1f2a2e; overflow: hidden; }
+  canvas { display: block; }
+  .bar { position: fixed; top: 12px; left: 12px; right: 12px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; z-index: 2; }
+  .bar button, .bar select { font: inherit; font-size: 13px; padding: 6px 12px; border-radius: 8px; border: 1px solid #aab3b6; background: #fff; cursor: pointer; }
+  .bar button.primary { background: #8a5a36; border-color: #8a5a36; color: #fff; font-weight: 600; }
+  .bar .hint { background: rgba(255,255,255,.8); padding: 3px 8px; border-radius: 6px; font-size: 12.5px; color: #4b585c; }
+  #labels { position: fixed; inset: 0; pointer-events: none; }
+  .lbl { position: absolute; left: 0; top: 0; background: #fff; border: 1px solid #1f2a2e; border-radius: 8px; padding: 4px 10px; white-space: nowrap; font-weight: 600; font-size: 14px; }
+  .lbl small { display: block; font-weight: 400; color: #5b6a70; font-size: 12px; }
+  body.clean .bar { display: none; }
+</style>
+</head>
+<body>
+<div class="bar">
+  <button id="b-png" class="primary">Скачать PNG</button>
+  <button id="b-lbl">Подписи: вкл</button>
+  <button id="b-clean">Чистый кадр (Esc — выход)</button>
+  <button id="b-reset">Исходный ракурс</button>
+  <span class="hint">Левая кнопка — вращать, правая — сдвигать, колесо — приближать</span>
+</div>
+<div id="labels"></div>
+<script src="https://unpkg.com/three@0.128.0/build/three.min.js"></script>
+<script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://unpkg.com/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="diorama.js?v=1"></script>
+</body>
+</html>
