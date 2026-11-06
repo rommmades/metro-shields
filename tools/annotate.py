@@ -17,11 +17,14 @@ def font(size, bold=False):
 def hexa(h, a=255): h = h.lstrip("#"); return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4)) + (a,)
 INK, MUTED, BROWN = hexa("#1f2a2e"), hexa("#5b6a70"), hexa("#8a5a36")
 
+BOXES = []
 def pill(x, y, text, sub=None, color=None, anchor_up=True):
     f1, f2 = font(22, True), font(17)
     w = max(d.textlength(text, font=f1), d.textlength(sub, font=f2) if sub else 0) + 28
     h = 38 + (22 if sub else 0)
     bx, by = x - w / 2, y - h - 26
+    while any(bx < X2 and bx + w > X1 and by < Y2 and by + h > Y1 for X1, Y1, X2, Y2 in BOXES): by -= 12   # не накладывать подписи
+    BOXES.append((bx - 6, by - 6, bx + w + 6, by + h + 6))
     d.line([(x, y), (x, by + h)], fill=INK, width=2)
     d.ellipse([x - 4, y - 4, x + 4, y + 4], fill=INK)
     d.rounded_rectangle([bx, by, bx + w, by + h], 10, fill=(255, 255, 255, 235), outline=hexa(color) if color else INK, width=3 if color else 1)
