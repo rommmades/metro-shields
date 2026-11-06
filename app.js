@@ -11,6 +11,8 @@
   const ESC_ANGLE = 30;  // наклон эскалаторного хода, градусы
   const $ = id => document.getElementById(id);
   const fmt = n => Math.round(n).toLocaleString('ru-RU');
+  const EDIT = qs.has('edit');
+  if (EDIT) document.body.classList.add('edit');
 
   const map = new maplibregl.Map({
     container: 'map', style: STYLE, center: [30.335, 59.903], zoom: 13.6, pitch: 55, bearing: -20,
@@ -22,7 +24,7 @@
   let scene, ugGroup, ugLabels = [];
 
   Promise.all([fetch('data/shields.json', { cache: 'no-cache' }).then(r => r.json()), new Promise(res => map.on('load', res))])
-    .then(([d]) => { DATA = d; tuneStyle(); setupPicker(); pick(qs.get('shield') || DATA.shields[0].id); if (qs.has('under')) openUnder(); })
+    .then(([d]) => { DATA = d; tuneStyle(); setupPicker(); pick(qs.get('shield') || DATA.shields[0].id); setupEdit(); if (qs.has('under')) openUnder(); })
     .catch(e => { console.error(e); $('p-next').textContent = 'Не удалось загрузить данные.'; });
 
   // --- Стиль карты: убираем лишние значки, делаем дома спокойными и полупрозрачными ---
@@ -141,7 +143,8 @@
         labelAt = [vest.position.x, vest.position.y];
       }
       const ll = toLngLat(labelAt[0], labelAt[1]);
-      markers.push(label(s.name + (s.pilot ? ' <small>пилотный тоннель</small>' : ''), ll, 'new'));
+      markers.push(label(s.name + (s.pilot ? ' <small>пилотный тоннель</small>' : ''), ll, 'new', s.vestibule ? { type: 'vest', s } : { type: 'hall', s }));
+      if (EDIT && s.vestibule) markers.push(label('◆ зал «' + s.name + '»', toLngLat(mid.x, mid.y), 'hall', { type: 'hall', s }));
       ugLabels.push({ html: s.name, pos: new THREE.Vector3(labelAt[0], labelAt[1], 22), cls: 'new' });
     });
 
@@ -171,7 +174,7 @@
       const kiosk = new THREE.Mesh(new THREE.BoxGeometry(12, 12, 7), mat(0x7d878c, 1));
       kiosk.position.set(top.x, top.y, 3.5); scene.add(kiosk);
       const name = v.name || 'Вентшахта';
-      markers.push(label(name + (v.note ? ' <small>' + v.note + '</small>' : ''), toLngLat(top.x, top.y), 'vs'));
+      markers.push(label(name + (v.note ? ' <small>' + v.note + '</small>' : ''), toLngLat(top.x, top.y), 'vs', { type: 'shaft', v }));
       ugLabels.push({ html: name, pos: new THREE.Vector3(top.x, top.y, 12), cls: 'vs' });
     });
     (shield.existing || DATA.existing || []).forEach(e => {
@@ -251,10 +254,59 @@
     }
   }
 
-  function label(html, ll, cls) {
+  function label(html, ll, cls, ref) {
     const el = document.createElement('div'); el.className = 'lbl ' + cls; el.innerHTML = html;
-    return new maplibregl.Marker({ element: el, anchor: 'bottom', offset: [0, -6] }).setLngLat(ll).addTo(map);
+    const mk = new maplibregl.Marker({ element: el, anchor: 'bottom', offset: [0, -6], draggable: !!(EDIT && ref) }).setLngLat(ll).addTo(map);
+    if (EDIT && ref) { el.classList.add('drag'); mk.on('dragend', () => onDrag(ref, mk.getLngLat())); }
+    return mk;
   }
+
+  // --- Режим правки (?edit): перетаскивание станций, вестибюлей и шахт, ввод кольца ---
+  function ringOfT(t) {
+    const k = shield.ringKnots;
+    for (let i = 0; i < k.length - 1; i++) if (t <= k[i + 1][1]) { const a = k[i], b = k[i + 1]; return a[0] + (b[0] - a[0]) * (t - a[1]) / (b[1] - a[1]); }
+    return k[k.length - 1][0];
+  }
+  function onDrag(ref, ll) {
+    const p = [+ll.lng.toFixed(6), +ll.lat.toFixed(6)];
+    if (ref.type === 'shaft') { ref.v.lnglat = p; delete ref.v.ring; }
+    else if (ref.type === 'vest') { ref.s.vestibule = Object.assign({}, ref.s.vestibule, { lnglat: p, moved: true }); }
+    else if (ref.type === 'hall') {
+      const [x, y] = toLocal(p); let best = 1e18, bt = 0;
+      for (let k = 0; k <= 1000; k++) { const q = layer.curve.getPointAt(k / 1000), d = (q.x - x) ** 2 + (q.y - y) ** 2; if (d < best) { best = d; bt = k / 1000; } }
+      const len = ref.s.to - ref.s.from, c = Math.round(ringOfT(bt));
+      ref.s.from = Math.round(c - len / 2); ref.s.to = ref.s.from + len;
+    }
+    dirty();
+    buildScene(); setRing($('ring').value);
+  }
+  function dirty() { const b = $('e-save'); if (b) { b.textContent = 'Скачать shields.json •'; } }
+  function setupEdit() {
+    if (!EDIT) return;
+    const box = document.createElement('section'); box.className = 'card editbox';
+    box.innerHTML = `<div class="eyebrow">Режим правки</div>
+      <div class="small muted">Перетаскивайте подписи: вестибюли, шахты, ◆ залы станций (зал двигается вдоль трассы).</div>
+      <label class="small">Кольцо (или метры) <input id="e-ring" type="number" min="0" step="1"></label>
+      <label class="small">Дата <input id="e-date" type="date"></label>
+      <button id="e-apply">Применить</button>
+      <div class="btns"><button id="e-save" class="primary">Скачать shields.json</button><button id="e-copy">Копировать</button>
+      <a id="e-gh" class="btnlink" href="https://github.com/rommmades/metro-shields/edit/main/data/shields.json" target="_blank" rel="noopener">Открыть файл на GitHub</a></div>
+      <div class="small muted">Чтобы сохранить: «Копировать», затем на GitHub выделите весь текст файла, вставьте и нажмите Commit changes.</div>`;
+    document.body.appendChild(box);
+    const fill = () => { $('e-ring').value = shield.ring; $('e-date').value = DATA.updated; };
+    fill(); $('p-pick').addEventListener('change', fill);
+    $('e-apply').onclick = () => {
+      const r = +$('e-ring').value, d = $('e-date').value || new Date().toISOString().slice(0, 10);
+      shield.ring = r; DATA.updated = d; shield.history = shield.history || [];
+      const last = shield.history[shield.history.length - 1];
+      if (last && last.date === d) last.ring = r; else shield.history.push({ date: d, ring: r });
+      $('ring').value = r; setRing(r); pickTexts(); dirty();
+    };
+    const json = () => JSON.stringify(DATA, null, 1);
+    $('e-save').onclick = () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([json()], { type: 'application/json' })); a.download = 'shields.json'; a.click(); };
+    $('e-copy').onclick = () => navigator.clipboard.writeText(json()).then(() => { $('e-copy').textContent = 'Скопировано'; setTimeout(() => $('e-copy').textContent = 'Копировать', 1500); });
+  }
+  function pickTexts() { $('p-note').textContent = [shield.note, 'Обновлено ' + new Date(DATA.updated).toLocaleDateString('ru-RU')].filter(Boolean).join('. ') + '.'; }
 
   function tOfRing(r) {
     const k = shield.ringKnots;
