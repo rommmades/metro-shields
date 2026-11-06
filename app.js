@@ -124,8 +124,8 @@
     const Z = new THREE.Vector3(0, 0, 1);
     const UPY = new THREE.Vector3(0, 1, 0);
     const M = {
-      esc: mat(0xf4efe6, 0.5), lane: mat(0x6f6760, 1), cham: mat(0xe6dfd2, 0.95),
-      shaft: mat(0xb9c3c8, 0.6), gal: mat(0xa9b4ba, 0.95), kiosk: mat(0x7d878c, 1), grille: mat(0x3d4549, 1), vest: mat(lineCol, 0.95)
+      esc: mat(0xf1ebe0, 1), lane: mat(0x6f6760, 1), cham: mat(0xe6dfd2, 1), hall: mat(0xf4f1ea, 1), wallEnd: mat(0xd9d2c4, 1),
+      shaft: mat(0xb9c3c8, 1), gal: mat(0xa9b4ba, 1), kiosk: mat(0x7d878c, 1), grille: mat(0x3d4549, 1), vest: mat(lineCol, 0.95)
     };
     // Цилиндр между двумя точками (тоннели из тюбингов круглые)
     function rod(a, b, r, m, seg = 20) {
@@ -148,14 +148,15 @@
       const T = new THREE.Vector3(vx - d.x * 14, vy - d.y * 14, zt);       // верхняя камера под вестибюлем
       const B = new THREE.Vector3(T.x - d.x * run, T.y - d.y * run, zb);    // низ наклона, на уровне зала
       // переход от торца зала к нижней камере (может идти назад, если вестибюль рядом со станцией)
+      // все выработки соединяются по осям: концы каждой уходят внутрь соседней, поэтому стыки без щелей и торчащих хвостов
       const pa = new THREE.Vector3(base.x, base.y, zb), pl = Math.hypot(B.x - pa.x, B.y - pa.y);
-      if (pl > 2) box((pa.x + B.x) / 2, (pa.y + B.y) / 2, zb, pl + 8, 12, 10, B.x - pa.x, B.y - pa.y, M.cham);
-      box(B.x, B.y, zb + 1, 20, 18, 14, d.x, d.y, M.cham);                  // нижняя натяжная камера
-      box(T.x, T.y, zt, 22, 18, 12, d.x, d.y, M.cham);                      // верхняя камера, машинное помещение
-      const a = B.clone().add(new THREE.Vector3(d.x * 8, d.y * 8, 3)), b = T.clone().add(new THREE.Vector3(-d.x * 9, -d.y * 9, -2));
-      rod(a, b, 6.5, M.esc, 24);                                             // наклонный ход Ø ≈ 10 м
-      const side = new THREE.Vector3(-d.y, d.x, 0);
-      [-3, 0, 3].forEach(k => { const o = side.clone().multiplyScalar(k).add(new THREE.Vector3(0, 0, -2.2)); rod(a.clone().add(o), b.clone().add(o), 0.7, M.lane, 6); });
+      if (pl > 2) rod(pa, B, R * 0.95, M.hall, 24);                          // переход из торца зала к нижней камере
+      box(B.x, B.y, zb + 2, 22, 2 * R + 6, 2 * R + 4, d.x, d.y, M.cham);    // нижняя натяжная камера
+      box(T.x, T.y, zt, 24, 20, 12, d.x, d.y, M.cham);                      // верхняя камера, машинное помещение
+      const a = B.clone().add(new THREE.Vector3(0, 0, 2)), b = T.clone();
+      rod(a, b, 6.5, M.esc, 24);                                             // наклонный ход Ø ≈ 13 м (утрирован)
+      const side = new THREE.Vector3(-d.y, d.x, 0), L = b.clone().sub(a), shrink = L.clone().normalize().multiplyScalar(12);
+      [-3, 0, 3].forEach(k => { const o = side.clone().multiplyScalar(k).add(new THREE.Vector3(0, 0, -5.6)); rod(a.clone().add(shrink).add(o), b.clone().sub(shrink).add(o), 0.7, M.lane, 6); });
       // наземный вестибюль: размер и поворот можно задать вручную (vestibule.size, vestibule.rot в градусах)
       const [vl, vw] = (vo && vo.size) || [42, 26], va = vo && vo.rot != null ? vo.rot * Math.PI / 180 : Math.atan2(d.y, d.x);
       if (vo) vo._auto = Math.round(((Math.atan2(d.y, d.x) * 180 / Math.PI) % 180 + 180) % 180);
@@ -163,23 +164,46 @@
     }
     // Вентиляционная шахта: ствол из тюбингов → вентиляционная камера внизу → сбойка к перегонным тоннелям,
     // наверху оголовок и вентиляционный киоск с решётками
-    function shaftComplex(p, top, off, v) {
-      const z0 = p.z, u = off.clone().normalize();
-      rod(new THREE.Vector3(top.x, top.y, z0 + 4), new THREE.Vector3(top.x, top.y, 0.5), 4.5, M.shaft, 20);
-      box(top.x, top.y, z0, 18, 16, 14, u.x, u.y, M.cham);                   // вентиляционная камера
-      const far = new THREE.Vector3(p.x - u.x * 22, p.y - u.y * 22, z0);      // сбойка проходит через тоннель к соседнему
-      box((top.x + far.x) / 2, (top.y + far.y) / 2, z0, Math.hypot(top.x - far.x, top.y - far.y), 6.5, 7.5, u.x, u.y, M.gal);
-      rod(new THREE.Vector3(top.x, top.y, -1), new THREE.Vector3(top.x, top.y, 1.5), 6, M.kiosk, 20); // оголовок
+    // Вентиляционная шахта глубокого заложения: ствол опускается вертикально рядом с тоннелем,
+    // внизу околоствольная камера и короткая сбойка под прямым углом в тоннель. Киоск на поверхности
+    // может стоять в стороне — тогда к оголовку ствола идёт неглубокий вентиляционный канал.
+    function shaftComplex(p, top, perp, v) {
+      const z0 = p.z, u = perp.clone().normalize(), off = R * 2.6;
+      const st = new THREE.Vector3(p.x + u.x * off, p.y + u.y * off, 0);      // ось ствола
+      rod(new THREE.Vector3(st.x, st.y, z0), new THREE.Vector3(st.x, st.y, -1), 4.5, M.shaft, 20);
+      box(st.x, st.y, z0, 12, 14, 12, u.x, u.y, M.cham);                     // околоствольная камера
+      box((st.x + p.x) / 2, (st.y + p.y) / 2, z0 - R * 0.3, off, 6, 7, u.x, u.y, M.gal);   // сбойка в тоннель, конец внутри трубы
+      rod(new THREE.Vector3(st.x, st.y, -6), new THREE.Vector3(st.x, st.y, 1.5), 6, M.kiosk, 20); // оголовок
+      const cl = Math.hypot(top.x - st.x, top.y - st.y);
+      if (cl > 8) box((top.x + st.x) / 2, (top.y + st.y) / 2, -4, cl, 6, 5, top.x - st.x, top.y - st.y, M.gal);   // канал к киоску
       const [kl, kw] = v.size || [16, 10], ka = v.rot != null ? v.rot * Math.PI / 180 : Math.atan2(u.y, u.x);
       v._auto = Math.round(((Math.atan2(u.y, u.x) * 180 / Math.PI) % 180 + 180) % 180);
       box(top.x, top.y, 4, kl, kw, 5, Math.cos(ka), Math.sin(ka), M.kiosk);  // киоск
       box(top.x, top.y, 6.6, kl - 2, kw - 2, 0.4, Math.cos(ka), Math.sin(ka), M.grille); // решётка
     }
+    // Пилонная станция глубокого заложения: средний зал и два боковых (платформенных), между пилонами проходы.
+    // Торцы залов закрыты стенками, проходы начинаются и заканчиваются внутри залов — стыки чистые.
+    function pylonStation(t1, t2) {
+      const n = 16, gap = R * 2.9, halls = [[0, R * 1.45], [-gap, R * 1.3], [gap, R * 1.3]];
+      const at = (t, o) => { const p = curve.getPointAt(t), tg = curve.getTangentAt(t).setZ(0).normalize(); return new THREE.Vector3(p.x - tg.y * o, p.y + tg.x * o, p.z); };
+      halls.forEach(([o, r]) => {
+        const c = new THREE.CatmullRomCurve3(Array.from({ length: n }, (_, i) => at(t1 + (t2 - t1) * i / (n - 1), o)));
+        scene.add(new THREE.Mesh(new THREE.TubeGeometry(c, 48, r, 24, false), M.hall));
+        [0, 1].forEach(e => { const p = c.getPointAt(e), tg = c.getTangentAt(e).multiplyScalar(e ? 1 : -1); rod(p, p.clone().add(tg.multiplyScalar(1.2)), r, M.wallEnd, 24); });
+      });
+      const len = curve.getLength() * (t2 - t1), k = Math.max(3, Math.floor(len / 22));
+      for (let i = 1; i < k; i++) {
+        const t = t1 + (t2 - t1) * i / k;
+        [-1, 1].forEach(sg => { const a = at(t, 0), b = at(t, sg * gap); rod(a.clone().setZ(a.z - R * 0.35), b.clone().setZ(b.z - R * 0.35), R * 0.55, M.hall, 12); });
+      }
+    }
     shield.stations.forEach(s => {
       const t1 = Math.max(0, tOfRing(s.from)), t2 = Math.min(1, tOfRing(s.to));
       if (t2 <= t1) return;
-      const sub = new THREE.CatmullRomCurve3(Array.from({ length: 10 }, (_, i) => curve.getPointAt(t1 + (t2 - t1) * i / 9)));
-      scene.add(new THREE.Mesh(new THREE.TubeGeometry(sub, 24, R * 2.2, 8, false), s.pilot ? mat(accent, 0.45) : mat(0xffffff, 0.92)));
+      if (s.pilot) {
+        const sub = new THREE.CatmullRomCurve3(Array.from({ length: 10 }, (_, i) => curve.getPointAt(t1 + (t2 - t1) * i / 9)));
+        scene.add(new THREE.Mesh(new THREE.TubeGeometry(sub, 24, R * 1.6, 16, false), mat(accent, 0.45)));
+      } else pylonStation(t1, t2);
       const mid = curve.getPointAt((t1 + t2) / 2);
       let labelAt = [mid.x, mid.y];
       if (s.vestibule && s.vestibule.lnglat) {
@@ -208,7 +232,7 @@
 
     // Вентиляционные шахты: ствол от тоннеля до поверхности и киоск наверху
     (shield.shafts || []).forEach((v, i) => {
-      let p, top;
+      let p, top, perp = null;
       if (v.lnglat) {
         // Шахта по адресу: ствол там, где площадка, и горизонтальная сбойка к ближайшей точке тоннеля
         const [sx, sy] = toLocal(v.lnglat);
@@ -216,15 +240,17 @@
         for (let k = 0; k <= 400; k++) { const q = curve.getPointAt(k / 400), dd = (q.x - sx) ** 2 + (q.y - sy) ** 2; if (dd < best) { best = dd; bt = k / 400; } }
         if (Math.sqrt(best) > 400) return; // площадка далеко от этого участка
         p = curve.getPointAt(bt); top = new THREE.Vector3(sx, sy, 0);
+        const tg = curve.getTangentAt(bt).setZ(0).normalize(), nrm = new THREE.Vector3(-tg.y, tg.x, 0);
+        perp = nrm.multiplyScalar((sx - p.x) * nrm.x + (sy - p.y) * nrm.y >= 0 ? 1 : -1);
       } else {
         const t = Math.min(1, Math.max(0, tOfRing(v.ring)));
         p = curve.getPointAt(t); const tan = curve.getTangentAt(t).setZ(0).normalize();
-        const o = new THREE.Vector3(-tan.y, tan.x, 0).multiplyScalar(R * 3.2);
+        const o = new THREE.Vector3(-tan.y, tan.x, 0).multiplyScalar(R * 2.6);
         top = new THREE.Vector3(p.x + o.x, p.y + o.y, 0);
       }
-      const off = new THREE.Vector3(top.x - p.x, top.y - p.y, 0);
-      if (off.length() < 1) off.set(R * 3, 0, 0), top.set(p.x + off.x, p.y + off.y, 0);
-      shaftComplex(p, top, off, v);
+      if (!perp) perp = new THREE.Vector3(top.x - p.x, top.y - p.y, 0);
+      if (perp.length() < 0.01) perp.set(1, 0, 0);
+      shaftComplex(p, top, perp, v);
       const name = v.name || 'Вентшахта';
       markers.push(label(name + (v.note ? ' <small>' + v.note + '</small>' : ''), toLngLat(top.x, top.y), 'vs', { type: 'shaft', v }));
       ugLabels.push({ html: name, pos: new THREE.Vector3(top.x, top.y, 12), cls: 'vs' });
