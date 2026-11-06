@@ -313,13 +313,44 @@
     });
 
     // Пройденная часть и щит
-    const doneMat = mat(lineDark, 1);
+    const doneMat = mat(lineDark, 1), ringMat = mat(0xbdb8ae, 0.32), jointMat = mat(0x8d877d, 0.75);
+    const ringGeo = new THREE.TorusGeometry(R * 1.035, 0.14, 4, 32);
+    // Тоннелепроходческий щит: ротор с лучами и резцами, передний и хвостовой щит с шарниром,
+    // эректор в хвосте и поезд технологических тележек позади (ось щита — Y, вперёд +Y)
+    function makeTBM(col) {
+      const g = new THREE.Group(), C = new THREE.Color(col);
+      const shell = new THREE.MeshLambertMaterial({ color: C, emissive: C, emissiveIntensity: 0.18 });
+      const shell2 = new THREE.MeshLambertMaterial({ color: C.clone().multiplyScalar(0.8), emissive: C, emissiveIntensity: 0.1 });
+      const steel = new THREE.MeshLambertMaterial({ color: 0x59626a }), light = new THREE.MeshLambertMaterial({ color: 0xd9dcdc });
+      const cyl = (r1, r2, h, y, m, seg = 40) => { const c = new THREE.Mesh(new THREE.CylinderGeometry(r1, r2, h, seg), m); c.position.y = y; g.add(c); return c; };
+      const Rs = R * 1.22;
+      cyl(Rs, Rs, 9, 7.5, shell);                        // передний щит
+      cyl(Rs * 0.99, Rs * 0.99, 1.2, 2.4, steel);        // шарнир
+      cyl(Rs * 0.98, Rs * 0.98, 12, -4, shell2);         // хвостовой щит
+      cyl(Rs * 0.98, Rs * 0.9, 1.5, -10.6, steel);       // щёточное уплотнение хвоста
+      cyl(Rs * 1.02, Rs * 1.02, 1.6, 12.8, steel);       // ротор
+      const face = 13.7;
+      cyl(Rs * 0.28, Rs * 0.34, 2.4, face, light, 24);   // центральная ступица
+      for (let i = 0; i < 6; i++) {                       // лучи ротора с резцами
+        const a = i * Math.PI / 3, spoke = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.2, Rs * 0.95), light);
+        spoke.position.set(Math.cos(a) * Rs * 0.5, face, Math.sin(a) * Rs * 0.5); spoke.rotation.y = -a + Math.PI / 2; g.add(spoke);
+        for (let k = 1; k <= 3; k++) { const cut = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 0.9, 8), steel);
+          cut.position.set(Math.cos(a) * Rs * (0.25 + k * 0.22), face + 0.9, Math.sin(a) * Rs * (0.25 + k * 0.22)); g.add(cut); }
+      }
+      const rim = new THREE.Mesh(new THREE.TorusGeometry(Rs * 0.97, 0.55, 8, 48), light); rim.rotation.x = Math.PI / 2; rim.position.y = face; g.add(rim);
+      cyl(Rs * 0.62, Rs * 0.62, 3, -9, steel, 24).scale.set(1, 1, 0.35);   // эректор
+      for (let i = 0; i < 5; i++) {                       // тележки: рамы с площадками
+        const y = -17 - i * 11, fr = new THREE.Group(); fr.position.y = y;
+        [[-1, 1], [1, 1], [-1, -1], [1, -1]].forEach(([sx, sz]) => { const b = new THREE.Mesh(new THREE.BoxGeometry(0.7, 9, 0.7), steel); b.position.set(sx * R * 0.62, 0, sz * R * 0.45 - R * 0.15); fr.add(b); });
+        const deck = new THREE.Mesh(new THREE.BoxGeometry(R * 1.3, 9.4, 0.5), steel); deck.position.z = -R * 0.6; fr.add(deck);
+        const top = new THREE.Mesh(new THREE.BoxGeometry(R * 1.2, 8.6, 0.4), steel); top.position.z = R * 0.3; fr.add(top);
+        const box = new THREE.Mesh(new THREE.BoxGeometry(R * 0.7, 6, R * 0.55), i % 2 ? light : shell2); box.position.z = -R * 0.05; fr.add(box);
+        g.add(fr);
+      }
+      return g;
+    }
     let doneMesh = null;
-    const sh = new THREE.Group();
-    const body = new THREE.Mesh(new THREE.CylinderGeometry(R * 1.3, R * 1.3, 26, 24), new THREE.MeshLambertMaterial({ color: accent, emissive: accent, emissiveIntensity: 0.4 }));
-    sh.add(body);
-    const head = new THREE.Mesh(new THREE.CylinderGeometry(R * 1.4, R * 1.4, 3, 24), mat(0x39474f, 1)); head.position.y = 14; sh.add(head);
-    scene.add(sh);
+    const sh = makeTBM(accent); scene.add(sh);
     const beacon = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, D, 6), new THREE.MeshBasicMaterial({ color: accent, transparent: true, opacity: 0.7 }));
     beacon.rotation.x = Math.PI / 2; scene.add(beacon);
     const shLabel = label('', shield.path[0], 'sh');
@@ -337,10 +368,20 @@
         const p = curve.getPointAt(t), tan = curve.getTangentAt(t);
         sh.position.copy(p); sh.quaternion.setFromUnitVectors(Y, tan);
         beacon.position.set(p.x, p.y, -D / 2);
-        if (doneMesh) { scene.remove(doneMesh); doneMesh.geometry.dispose(); doneMesh = null; }
+        if (doneMesh) { scene.remove(doneMesh); doneMesh.traverse(o => o.geometry && o.geometry !== ringGeo && o.geometry.dispose()); doneMesh = null; }
         if (t > 0.002) {
-          const dp = Array.from({ length: 80 }, (_, i) => curve.getPointAt(t * i / 79));
-          doneMesh = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(dp), 160, R * 1.03, 16, false), doneMat);
+          // пройденный тоннель; последние ~90 м за щитом полупрозрачные, чтобы был виден поезд тележек и кольца обделки
+          const L = curve.getLength(), tc = Math.max(0, t - 90 / L);
+          doneMesh = new THREE.Group();
+          if (tc > 0.001) { const dp = Array.from({ length: 80 }, (_, i) => curve.getPointAt(tc * i / 79));
+            doneMesh.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(dp), 160, R * 1.03, 16, false), doneMat)); }
+          const tp = Array.from({ length: 20 }, (_, i) => curve.getPointAt(tc + (t - tc) * i / 19));
+          doneMesh.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(tp), 40, R * 1.03, 24, false), ringMat));
+          const n = Math.floor((t - tc) * L / 1.5);
+          for (let i = 1; i < n; i++) {                                                  // стыки колец обделки
+            const tt = t - (12 + i * 1.5) / L, q = curve.getPointAt(tt), g = new THREE.Mesh(ringGeo, jointMat);
+            g.position.copy(q); g.quaternion.setFromUnitVectors(Z, curve.getTangentAt(tt)); doneMesh.add(g);
+          }
           scene.add(doneMesh);
         }
         const ll = toLngLat(p.x, p.y);
@@ -637,7 +678,7 @@
       }
     }
   };
-  if (qs.has('debug')) window.__dbg = { UG, toLocal: ll => toLocal(ll) };
+  if (qs.has('debug')) window.__dbg = { UG, toLocal: ll => toLocal(ll), get layer() { return layer; }, map };
   function openUnder() {
     if (!UG.renderer) UG.init();
     UG.open = true; $('under').hidden = false; document.body.classList.add('ug');
