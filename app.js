@@ -182,6 +182,36 @@
       const [x, y] = toLocal(e.lnglat); ugLabels.push({ html: `${e.name} <small>${e.line}</small>`, pos: new THREE.Vector3(x, y, 8), cls: 'ex' });
     });
 
+    // Остальные щиты — тоже на сцене, чтобы видеть, например, «Любовь» и «Веру» вместе
+    const others = [];
+    DATA.shields.filter(o => o !== shield).forEach(o => {
+      const opts = o.path.map(ll => { const [x, y] = toLocal(ll); return new THREE.Vector3(x, y, -o.depth * VEX); });
+      if (Math.hypot(opts[0].x, opts[0].y) > 30000) return; // далеко, не на этом экране
+      const oc = new THREE.CatmullRomCurve3(opts, false, 'centripetal');
+      const ocol = new THREE.Color(o.lineColor || '#8fa3b0'), oacc = new THREE.Color(o.color || '#e3a21a');
+      scene.add(new THREE.Mesh(new THREE.TubeGeometry(oc, 300, R, 12, false), mat(ocol, 0.3)));
+      const ot = Math.min(1, Math.max(0, tOfRing(o.ring, o)));
+      if (ot > 0.002) {
+        const dp = Array.from({ length: 60 }, (_, i) => oc.getPointAt(ot * i / 59));
+        scene.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(dp), 120, R * 1.03, 12, false), mat(ocol.clone().multiplyScalar(0.55), 1)));
+      }
+      const op = oc.getPointAt(ot), og = new THREE.Mesh(new THREE.CylinderGeometry(R * 1.3, R * 1.3, 26, 20), new THREE.MeshLambertMaterial({ color: oacc, emissive: oacc, emissiveIntensity: 0.4 }));
+      og.position.copy(op); og.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), oc.getTangentAt(ot)); scene.add(og);
+      const ob = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, o.depth * VEX, 6), new THREE.MeshBasicMaterial({ color: oacc, transparent: true, opacity: 0.6 }));
+      ob.rotation.x = Math.PI / 2; ob.position.set(op.x, op.y, -o.depth * VEX / 2); scene.add(ob);
+      const txt = '«' + o.name + '» · <span class="mono">' + (o.ring >= o.total ? 'финиш' : (o.unit === 'm' ? fmt(o.ring) + ' м' : 'кольцо ' + fmt(o.ring))) + '</span>';
+      const mk = label(txt, toLngLat(op.x, op.y), 'sh other');
+      mk.getElement().style.setProperty('--oc', o.color || '#e3a21a');
+      mk.getElement().title = 'Переключиться на «' + o.name + '»';
+      mk.getElement().onclick = () => pick(o.id);
+      markers.push(mk);
+      ugLabels.push({ html: txt, pos: new THREE.Vector3(op.x, op.y, 30), cls: 'sh other', color: o.color });
+      const line = Array.from({ length: 150 }, (_, i) => { const q = oc.getPointAt(i / 149), ll = toLngLat(q.x, q.y); return [ll.lng, ll.lat]; });
+      const n = Math.max(2, Math.round(ot * 149));
+      others.push({ type: 'Feature', properties: { k: 'all', c: o.lineColor || '#39474f' }, geometry: { type: 'LineString', coordinates: line } },
+        { type: 'Feature', properties: { k: 'done', c: o.lineColor || '#39474f' }, geometry: { type: 'LineString', coordinates: line.slice(0, n) } });
+    });
+
     // Пройденная часть и щит
     const doneMat = mat(lineDark, 1);
     let doneMesh = null;
@@ -241,6 +271,12 @@
     layer.line = line;
     const ctx = { type: 'FeatureCollection', features: (shield.context || []).map(c => ({ type: 'Feature', properties: { k: c.kind }, geometry: { type: 'LineString', coordinates: c.pts } })) };
     const lc = shield.lineColor || '#39474f';
+    const oth = { type: 'FeatureCollection', features: others };
+    if (!map.getSource('others')) {
+      map.addSource('others', { type: 'geojson', data: oth });
+      map.addLayer({ id: 'oth-all', type: 'line', source: 'others', filter: ['==', 'k', 'all'], paint: { 'line-color': ['get', 'c'], 'line-width': 2, 'line-dasharray': [2, 2], 'line-opacity': 0.5 } }, 'tunnel');
+      map.addLayer({ id: 'oth-done', type: 'line', source: 'others', filter: ['==', 'k', 'done'], paint: { 'line-color': ['get', 'c'], 'line-width': 4, 'line-opacity': 0.7 } }, 'tunnel');
+    } else map.getSource('others').setData(oth);
     if (!map.getSource('route')) {
       map.addSource('route', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
       map.addSource('context', { type: 'geojson', data: ctx });
@@ -308,8 +344,8 @@
   }
   function pickTexts() { $('p-note').textContent = [shield.note, 'Обновлено ' + new Date(DATA.updated).toLocaleDateString('ru-RU')].filter(Boolean).join('. ') + '.'; }
 
-  function tOfRing(r) {
-    const k = shield.ringKnots;
+  function tOfRing(r, sh = shield) {
+    const k = sh.ringKnots;
     for (let i = 0; i < k.length - 1; i++) if (r <= k[i + 1][0]) { const a = k[i], b = k[i + 1]; return a[1] + (b[1] - a[1]) * (r - a[0]) / (b[0] - a[0]); }
     return k[k.length - 1][1];
   }
@@ -364,7 +400,7 @@
       this.camera = new THREE.PerspectiveCamera(45, 1, 2, 30000);
       this.camera.up.set(0, 0, 1);
       this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
-      this.controls.enableDamping = true; this.controls.maxPolarAngle = Math.PI; this.controls.minDistance = 30; this.controls.maxDistance = 8000;
+      this.controls.enableDamping = true; this.controls.minPolarAngle = 0.05; this.controls.maxPolarAngle = Math.PI - 0.05; this.controls.minDistance = 30; this.controls.maxDistance = 8000;
       this.controls.addEventListener('change', () => this.dirty = true);
       addEventListener('resize', () => this.resize());
     },
@@ -431,8 +467,9 @@
       const p = layer.shieldP || layer.curve.getPointAt(0.5);
       const tan = layer.curve.getTangentAt(0.5).setZ(0).normalize();
       const side = new THREE.Vector3(-tan.y, tan.x, 0);
-      this.camera.position.set(p.x + side.x * 520 - tan.x * 260, p.y + side.y * 520 - tan.y * 260, p.z - 170);
-      this.controls.target.set(p.x, p.y, p.z * 0.6);
+      // y в сцене смотрит на юг; для подземной камеры сцена отражается (y → −y), чтобы не было зеркала
+      this.camera.position.set(p.x + side.x * 520 - tan.x * 260, -(p.y + side.y * 520 - tan.y * 260), p.z - 170);
+      this.controls.target.set(p.x, -p.y, p.z * 0.6);
       this.controls.update(); this.dirty = true;
     },
     loop() {
@@ -441,13 +478,15 @@
       if (!this.dirty) return;
       this.dirty = false;
       ugGroup.visible = true;
+      scene.scale.set(1, -1, 1); scene.updateMatrixWorld(true);
       this.renderer.render(scene, this.camera);
+      scene.scale.set(1, 1, 1); scene.updateMatrixWorld(true);
       const w = innerWidth, h = innerHeight, v = new THREE.Vector3();
       for (const { L, d } of this.labels) {
-        v.copy(L.pos).project(this.camera);
+        v.copy(L.pos); v.y = -v.y; v.project(this.camera);
         const show = v.z < 1 && Math.abs(v.x) < 1.1 && Math.abs(v.y) < 1.1;
         d.style.display = show ? '' : 'none';
-        if (show) { d.innerHTML = L.html; d.style.transform = `translate(${(v.x + 1) / 2 * w}px, ${(1 - v.y) / 2 * h}px) translate(-50%, -100%)`; }
+        if (show) { d.innerHTML = L.html; if (L.color) d.style.setProperty('--oc', L.color); d.style.transform = `translate(${(v.x + 1) / 2 * w}px, ${(1 - v.y) / 2 * h}px) translate(-50%, -100%)`; }
       }
     }
   };

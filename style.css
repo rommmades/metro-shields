@@ -65,3 +65,5 @@ body.ug .maplibregl-ctrl-top-right { display: none; }
 .editbox input { font: inherit; padding: 4px 6px; border: 1px solid var(--line); border-radius: 8px; }
 .btnlink { font-size: 13px; padding: 5px 10px; border-radius: 8px; border: 1px solid var(--line); background: #fff; color: var(--ink); text-decoration: none; }
 @media (max-width: 640px) { .editbox { top: auto; bottom: 150px; left: 12px; right: 12px; width: auto; } }
+.lbl.sh.other { background: var(--oc); border-color: var(--oc); color: #fff; opacity: .9; pointer-events: auto; cursor: pointer; }
+#under-labels .lbl.sh.other { pointer-events: none; }
