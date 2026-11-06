@@ -143,8 +143,8 @@
         labelAt = [vest.position.x, vest.position.y];
       }
       const ll = toLngLat(labelAt[0], labelAt[1]);
-      markers.push(label(s.name + (s.pilot ? ' <small>пилотный тоннель</small>' : ''), ll, 'new', s.vestibule ? { type: 'vest', s } : { type: 'hall', s }));
-      if (EDIT && s.vestibule) markers.push(label('◆ зал «' + s.name + '»', toLngLat(mid.x, mid.y), 'hall', { type: 'hall', s }));
+      markers.push(label(s.name + (s.pilot ? ' <small>пилотный тоннель</small>' : ''), ll, 'new', { type: 'vest', s }));
+      if (EDIT) markers.push(label('◆ зал «' + s.name + '»', toLngLat(mid.x, mid.y), 'hall', { type: 'hall', s }));
       ugLabels.push({ html: s.name, pos: new THREE.Vector3(labelAt[0], labelAt[1], 22), cls: 'new' });
     });
 
@@ -292,8 +292,8 @@
 
   function label(html, ll, cls, ref) {
     const el = document.createElement('div'); el.className = 'lbl ' + cls; el.innerHTML = html;
-    const mk = new maplibregl.Marker({ element: el, anchor: 'bottom', offset: [0, -6], draggable: !!(EDIT && ref) }).setLngLat(ll).addTo(map);
-    if (EDIT && ref) { el.classList.add('drag'); mk.on('dragend', () => onDrag(ref, mk.getLngLat())); }
+    const mk = new maplibregl.Marker({ element: el, anchor: cls === 'hall' ? 'top' : 'bottom', offset: [0, cls === 'hall' ? 6 : -6], draggable: !!(EDIT && ref) }).setLngLat(ll).addTo(map);
+    if (EDIT && ref) { el.classList.add('drag'); mk.on('dragend', () => { const ll = mk.getLngLat(); setTimeout(() => onDrag(ref, ll), 0); }); }
     return mk;
   }
 
@@ -320,15 +320,16 @@
   function setupEdit() {
     if (!EDIT) return;
     const box = document.createElement('section'); box.className = 'card editbox';
-    box.innerHTML = `<div class="eyebrow">Режим правки</div>
+    box.innerHTML = `<div class="row"><div class="eyebrow">Режим правки</div><button id="e-min" title="Свернуть">—</button></div><div class="ebody">
       <div class="small muted">Перетаскивайте подписи: вестибюли, шахты, ◆ залы станций (зал двигается вдоль трассы).</div>
       <label class="small">Кольцо (или метры) <input id="e-ring" type="number" min="0" step="1"></label>
       <label class="small">Дата <input id="e-date" type="date"></label>
       <button id="e-apply">Применить</button>
       <div class="btns"><button id="e-save" class="primary">Скачать shields.json</button><button id="e-copy">Копировать</button>
       <a id="e-gh" class="btnlink" href="https://github.com/rommmades/metro-shields/edit/main/data/shields.json" target="_blank" rel="noopener">Открыть файл на GitHub</a></div>
-      <div class="small muted">Чтобы сохранить: «Копировать», затем на GitHub выделите весь текст файла, вставьте и нажмите Commit changes.</div>`;
+      <div class="small muted">Чтобы сохранить: «Копировать», затем на GitHub выделите весь текст файла, вставьте и нажмите Commit changes.</div></div>`;
     document.body.appendChild(box);
+    $('e-min').onclick = () => { box.classList.toggle('min'); $('e-min').textContent = box.classList.contains('min') ? '+' : '—'; };
     const fill = () => { $('e-ring').value = shield.ring; $('e-date').value = DATA.updated; };
     fill(); $('p-pick').addEventListener('change', fill);
     $('e-apply').onclick = () => {
@@ -382,8 +383,8 @@
     const b = new maplibregl.LngLatBounds();
     shield.path.forEach(p => b.extend(p));
     const small = innerWidth < 640;
-    const cam = map.cameraForBounds(b, { padding: small ? { top: 170, bottom: 150, left: 20, right: 20 } : { top: 60, bottom: 140, left: 380, right: 60 }, bearing: -20 });
-    const o = { center: cam.center, zoom: cam.zoom + (small ? 0.2 : 0.8), bearing: -20, pitch: 55 };
+    const cam = map.cameraForBounds(b, { padding: small ? { top: 170, bottom: 150, left: 20, right: 20 } : { top: 60, bottom: 140, left: 380, right: EDIT ? 330 : 60 }, bearing: -20 });
+    const o = { center: cam.center, zoom: cam.zoom + (small ? 0.2 : EDIT ? 0 : 0.8), bearing: -20, pitch: 55 };
     animate ? map.easeTo({ ...o, duration: 1200 }) : map.jumpTo(o);
   }
   function follow() { map.easeTo({ center: layer.shieldLL, zoom: 15.8, pitch: 65, duration: 1200 }); }
