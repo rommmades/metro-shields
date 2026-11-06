@@ -576,10 +576,13 @@
 
   function overview(animate = true) {
     const b = new maplibregl.LngLatBounds();
-    shield.path.forEach(p => b.extend(p));
+    // весь участок линии: трассы всех щитов этой линии, а не только выбранного
+    const ln = (shield.line || '').split(',')[0];
+    const grp = DATA.shields.filter(o => o === shield || (ln && (o.line || '').startsWith(ln)));
+    grp.forEach(o => o.path.forEach(p => b.extend(p)));
     const small = innerWidth < 640;
     const cam = map.cameraForBounds(b, { padding: small ? { top: 170, bottom: 150, left: 20, right: 20 } : { top: 60, bottom: 140, left: 380, right: EDIT ? 330 : 60 }, bearing: -20 });
-    const o = { center: cam.center, zoom: cam.zoom + (small ? 0.2 : EDIT ? 0 : 0.8), bearing: -20, pitch: 55 };
+    const o = { center: cam.center, zoom: cam.zoom + (small ? 0.2 : EDIT || grp.length > 1 ? 0.15 : 0.8), bearing: -20, pitch: 55 };
     animate ? map.easeTo({ ...o, duration: 1200 }) : map.jumpTo(o);
   }
   function follow() { map.easeTo({ center: layer.shieldLL, zoom: 15.8, pitch: 65, duration: 1200 }); }
