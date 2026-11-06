@@ -1,0 +1,30 @@
+name: Рендер диорамы
+on:
+  workflow_dispatch:
+  push:
+    paths: ["data/shields.json", ".github/diorama-request.txt", "tools/diorama.py", "tools/annotate.py", "data/osm/area-*.json"]
+permissions:
+  contents: write
+concurrency: { group: diorama, cancel-in-progress: true }
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.13" }
+      - run: pip install -q bpy==5.1.2 pillow
+      - run: sudo apt-get install -y -q fonts-dejavu-core >/dev/null || true
+      - name: Рендер
+        run: |
+          grep -v '^#' .github/diorama-request.txt | while read n rest; do
+            [ -z "$n" ] && continue
+            python tools/diorama.py "$n" && python tools/annotate.py "$n"
+          done
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git add renders
+          git diff --cached --quiet || git commit -m "Рендер диорамы"
+          git pull --rebase -q && git push
