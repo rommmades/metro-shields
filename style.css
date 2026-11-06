@@ -82,3 +82,7 @@ body.ug .map-hint, body.edit .map-hint { display: none; }
 body.clean .panel, body.clean .dock, body.clean .editbox, body.clean .map-hint, body.clean .maplibregl-ctrl-top-right,
 body.clean .back, body.clean .under-hint { display: none !important; }
 body.clean .attrib { opacity: .75; }
+.lbl.sel { outline: 3px solid #1d2529 !important; z-index: 4; }
+.esel { display: grid; gap: 6px; padding: 8px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.esel input[type=range] { margin: 2px 0; }
+.editbox { max-height: calc(100vh - 130px); overflow: auto; }

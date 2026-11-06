@@ -140,7 +140,7 @@
     }
     // Эскалаторный комплекс глубокой станции: переход из торца зала → нижняя натяжная камера →
     // наклонный ход под 30° с тремя эскалаторами → верхняя камера (машинный зал) → наземный вестибюль
-    function escalatorComplex(base, vx, vy) {
+    function escalatorComplex(base, vx, vy, vo) {
       const d = new THREE.Vector2(vx - base.x, vy - base.y), dist = d.length(); d.normalize();
       const zb = base.z, zt = -6;
       const real = shield.depth / Math.tan(ESC_ANGLE * Math.PI / 180); // горизонтальный вынос хода при реальной глубине
@@ -156,19 +156,24 @@
       rod(a, b, 6.5, M.esc, 24);                                             // наклонный ход Ø ≈ 10 м
       const side = new THREE.Vector3(-d.y, d.x, 0);
       [-3, 0, 3].forEach(k => { const o = side.clone().multiplyScalar(k).add(new THREE.Vector3(0, 0, -2.2)); rod(a.clone().add(o), b.clone().add(o), 0.7, M.lane, 6); });
-      box(vx, vy, 4.5, 42, 26, 9, d.x, d.y, M.vest);                        // наземный вестибюль
+      // наземный вестибюль: размер и поворот можно задать вручную (vestibule.size, vestibule.rot в градусах)
+      const [vl, vw] = (vo && vo.size) || [42, 26], va = vo && vo.rot != null ? vo.rot * Math.PI / 180 : Math.atan2(d.y, d.x);
+      if (vo) vo._auto = Math.round(((Math.atan2(d.y, d.x) * 180 / Math.PI) % 180 + 180) % 180);
+      box(vx, vy, 4.5, vl, vw, 9, Math.cos(va), Math.sin(va), M.vest);
     }
     // Вентиляционная шахта: ствол из тюбингов → вентиляционная камера внизу → сбойка к перегонным тоннелям,
     // наверху оголовок и вентиляционный киоск с решётками
-    function shaftComplex(p, top, off) {
+    function shaftComplex(p, top, off, v) {
       const z0 = p.z, u = off.clone().normalize();
       rod(new THREE.Vector3(top.x, top.y, z0 + 4), new THREE.Vector3(top.x, top.y, 0.5), 4.5, M.shaft, 20);
       box(top.x, top.y, z0, 18, 16, 14, u.x, u.y, M.cham);                   // вентиляционная камера
       const far = new THREE.Vector3(p.x - u.x * 22, p.y - u.y * 22, z0);      // сбойка проходит через тоннель к соседнему
       box((top.x + far.x) / 2, (top.y + far.y) / 2, z0, Math.hypot(top.x - far.x, top.y - far.y), 6.5, 7.5, u.x, u.y, M.gal);
       rod(new THREE.Vector3(top.x, top.y, -1), new THREE.Vector3(top.x, top.y, 1.5), 6, M.kiosk, 20); // оголовок
-      box(top.x, top.y, 4, 16, 10, 5, u.x, u.y, M.kiosk);                    // киоск
-      box(top.x, top.y, 6.6, 14, 8, 0.4, u.x, u.y, M.grille);                // решётка
+      const [kl, kw] = v.size || [16, 10], ka = v.rot != null ? v.rot * Math.PI / 180 : Math.atan2(u.y, u.x);
+      v._auto = Math.round(((Math.atan2(u.y, u.x) * 180 / Math.PI) % 180 + 180) % 180);
+      box(top.x, top.y, 4, kl, kw, 5, Math.cos(ka), Math.sin(ka), M.kiosk);  // киоск
+      box(top.x, top.y, 6.6, kl - 2, kw - 2, 0.4, Math.cos(ka), Math.sin(ka), M.grille); // решётка
     }
     shield.stations.forEach(s => {
       const t1 = Math.max(0, tOfRing(s.from)), t2 = Math.min(1, tOfRing(s.to));
@@ -182,7 +187,7 @@
         const [vx, vy] = toLocal(s.vestibule.lnglat);
         const e1 = curve.getPointAt(t1), e2 = curve.getPointAt(t2);
         const base = Math.hypot(e1.x - vx, e1.y - vy) < Math.hypot(e2.x - vx, e2.y - vy) ? e1 : e2;
-        escalatorComplex(base, vx, vy);
+        escalatorComplex(base, vx, vy, s.vestibule);
         labelAt = [vx, vy];
       } else if (s.escalator) {
         // Адреса нет: наклонный ход продолжает ось станции за её торцом
@@ -192,7 +197,7 @@
         const dir = curve.getTangentAt(tEnd).setZ(0).normalize().multiplyScalar(atEnd ? 1 : -1);
         const run = shield.depth / Math.tan(ESC_ANGLE * Math.PI / 180) + 40;
         const vx = base.x + dir.x * run, vy = base.y + dir.y * run;
-        escalatorComplex(base, vx, vy);
+        escalatorComplex(base, vx, vy, s.vestibule);
         labelAt = [vx, vy];
       }
       const ll = toLngLat(labelAt[0], labelAt[1]);
@@ -219,7 +224,7 @@
       }
       const off = new THREE.Vector3(top.x - p.x, top.y - p.y, 0);
       if (off.length() < 1) off.set(R * 3, 0, 0), top.set(p.x + off.x, p.y + off.y, 0);
-      shaftComplex(p, top, off);
+      shaftComplex(p, top, off, v);
       const name = v.name || 'Вентшахта';
       markers.push(label(name + (v.note ? ' <small>' + v.note + '</small>' : ''), toLngLat(top.x, top.y), 'vs', { type: 'shaft', v }));
       ugLabels.push({ html: name, pos: new THREE.Vector3(top.x, top.y, 12), cls: 'vs' });
@@ -340,7 +345,11 @@
   function label(html, ll, cls, ref) {
     const el = document.createElement('div'); el.className = 'lbl ' + cls; el.innerHTML = html;
     const mk = new maplibregl.Marker({ element: el, anchor: cls === 'hall' ? 'top' : 'bottom', offset: [0, cls === 'hall' ? 6 : -6], draggable: !!(EDIT && ref) }).setLngLat(ll).addTo(map);
-    if (EDIT && ref) { el.classList.add('drag'); mk.on('dragend', () => { const ll = mk.getLngLat(); setTimeout(() => onDrag(ref, ll), 0); }); }
+    if (EDIT && ref) {
+      el.classList.add('drag');
+      const obj = selObj(ref); if (obj && obj === SEL.obj) el.classList.add('sel');
+      if (ref.type !== 'hall') el.addEventListener('click', () => select(ref)); mk.on('dragend', () => { const ll = mk.getLngLat(); setTimeout(() => { if (ref.type !== 'hall') SEL.obj = selObj(ref, true), SEL.ref = ref; onDrag(ref, ll); showSel(); }, 0); });
+    }
     return mk;
   }
 
@@ -364,10 +373,51 @@
     buildScene(); setRing($('ring').value);
   }
   function dirty() { const b = $('e-save'); if (b) { b.textContent = 'Скачать shields.json •'; } }
+  // Выбор вестибюля или шахты для поворота и размера
+  const SEL = { obj: null, ref: null };
+  function selObj(ref, create) {
+    if (ref.type === 'shaft') return ref.v;
+    if (ref.type === 'vest') { if (!ref.s.vestibule && create) ref.s.vestibule = {}; return ref.s.vestibule || null; }
+    return null;
+  }
+  function select(ref) {
+    SEL.ref = ref; SEL.obj = selObj(ref, true);
+    document.querySelectorAll('.lbl.sel').forEach(e => e.classList.remove('sel'));
+    rebuild(); showSel();
+  }
+  function showSel() {
+    const o = SEL.obj, box = $('e-sel'); if (!box) return;
+    if (!o) { box.innerHTML = '<span class="muted">Нажмите на подпись вестибюля или шахты, чтобы повернуть и изменить размер.</span>'; return; }
+    const isV = SEL.ref.type === 'vest', name = isV ? 'Вестибюль «' + SEL.ref.s.name + '»' : (o.name || 'Шахта');
+    const [l, w] = o.size || (isV ? [42, 26] : [16, 10]), r = o.rot != null ? o.rot : (o._auto || 0);
+    box.innerHTML = `<b>${name}</b>
+      <label class="small">Поворот, ° <span id="v-rot">${r}</span><input id="s-rot" type="range" min="0" max="179" step="1" value="${r}"></label>
+      <label class="small">Длина, м <span id="v-len">${l}</span><input id="s-len" type="range" min="4" max="150" step="1" value="${l}"></label>
+      <label class="small">Ширина, м <span id="v-wid">${w}</span><input id="s-wid" type="range" min="4" max="100" step="1" value="${w}"></label>
+      <button id="s-reset">Сбросить поворот и размер</button>`;
+    const upd = () => {
+      o.rot = +$('s-rot').value; o.size = [+$('s-len').value, +$('s-wid').value];
+      $('v-rot').textContent = o.rot; $('v-len').textContent = o.size[0]; $('v-wid').textContent = o.size[1];
+      dirty(); rebuild();
+    };
+    ['s-rot', 's-len', 's-wid'].forEach(id => $(id).addEventListener('input', upd));
+    $('s-reset').onclick = () => { delete o.rot; delete o.size; dirty(); rebuild(); showSel(); };
+  }
+  let rbf = 0;
+  function rebuild() { cancelAnimationFrame(rbf); rbf = requestAnimationFrame(() => { buildScene(); setRing($('ring').value); }); }
+  let top0 = null;
+  function topView() {
+    const on = !top0;
+    if (on) { top0 = { pitch: map.getPitch(), bearing: map.getBearing() }; map.easeTo({ pitch: 0, bearing: 0, duration: 600 }); }
+    else { map.easeTo({ ...top0, duration: 600 }); top0 = null; }
+    if (map.getLayer('building-3d')) map.setPaintProperty('building-3d', 'fill-extrusion-opacity', on ? 0.3 : 0.72);
+    $('e-top').textContent = on ? 'Вернуть 3D' : 'Вид сверху';
+  }
+
   function setupEdit() {
     if (!EDIT) return;
     const box = document.createElement('section'); box.className = 'card editbox';
-    box.innerHTML = `<div class="row"><div class="eyebrow">Режим правки</div><button id="e-min" title="Свернуть">—</button></div><div class="ebody">
+    box.innerHTML = `<div class="row"><div class="eyebrow">Режим правки</div><button id="e-min" title="Свернуть">—</button></div><div class="ebody"><button id="e-top" class="primary">Вид сверху</button><div id="e-sel" class="esel"></div>
       <div class="small muted">Перетаскивайте подписи: вестибюли, шахты, ◆ залы станций (зал двигается вдоль трассы).</div>
       <label class="small">Кольцо (или метры) <input id="e-ring" type="number" min="0" step="1"></label>
       <label class="small">Дата <input id="e-date" type="date"></label>
@@ -376,6 +426,7 @@
       <a id="e-gh" class="btnlink" href="https://github.com/rommmades/metro-shields/edit/main/data/shields.json" target="_blank" rel="noopener">Открыть файл на GitHub</a></div>
       <div class="small muted">Чтобы сохранить: «Копировать», затем на GitHub выделите весь текст файла, вставьте и нажмите Commit changes.</div></div>`;
     document.body.appendChild(box);
+    $('e-top').onclick = topView; showSel();
     $('e-min').onclick = () => { box.classList.toggle('min'); $('e-min').textContent = box.classList.contains('min') ? '+' : '—'; };
     const fill = () => { $('e-ring').value = shield.ring; $('e-date').value = DATA.updated; };
     fill(); $('p-pick').addEventListener('change', fill);
@@ -386,7 +437,7 @@
       if (last && last.date === d) last.ring = r; else shield.history.push({ date: d, ring: r });
       $('ring').value = r; setRing(r); pickTexts(); dirty();
     };
-    const json = () => JSON.stringify(DATA, null, 1);
+    const json = () => JSON.stringify(DATA, (k, v) => k.startsWith('_') ? undefined : v, 1);
     $('e-save').onclick = () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([json()], { type: 'application/json' })); a.download = 'shields.json'; a.click(); };
     $('e-copy').onclick = () => navigator.clipboard.writeText(json()).then(() => { $('e-copy').textContent = 'Скопировано'; setTimeout(() => $('e-copy').textContent = 'Копировать', 1500); });
   }
