@@ -61,4 +61,4 @@ for sh in data["shields"]:
         v["addr"] = src; v["lnglat"] = ll_(cand)
         v["placed"] = "площадка подобрана рядом с адресом: ближайшее место не в доме (OSM)"
         print(v["name"], "перенесена на", round(math.dist(p0, cand)), "м")
-json.dump(data, open("data/shields.json", "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+json.dump(data, open("data/shields.json", "w", encoding="utf-8"), ensure_ascii=False, indent=1)
