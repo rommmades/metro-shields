@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Сводка по кольцам — щиты метро СПб</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@600;700&family=Golos+Text:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+  :root { --ink: #1d2529; --muted: #5d6a71; --line: #dfe4e6; --bg: #f3f1ec; --card: #fff; --brown: #8a5a36; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 "Golos Text", system-ui, sans-serif; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 24px 16px 60px; }
+  nav { display: flex; gap: 6px; margin-bottom: 22px; flex-wrap: wrap; }
+  nav a { text-decoration: none; color: var(--ink); padding: 6px 12px; border-radius: 8px; border: 1px solid var(--line); background: #fff; font-size: 13.5px; }
+  nav a.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .eyebrow { font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  h1 { font: 700 30px/1.15 "Unbounded", sans-serif; margin: 6px 0 4px; }
+  .lead { color: var(--muted); margin: 0 0 22px; }
+  .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-bottom: 26px; }
+  .kpi { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; }
+  .kpi b { display: block; font: 600 26px/1.1 "IBM Plex Mono", monospace; margin: 4px 0 2px; }
+  .kpi span { color: var(--muted); font-size: 13px; }
+  .line-strip { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px 12px; margin-bottom: 26px; }
+  .line-strip h2, .grid h2 { font: 600 16px/1.2 "Unbounded", sans-serif; margin: 0 0 10px; }
+  svg text { font-family: "Golos Text", sans-serif; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 14px; }
+  .sh { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; position: relative; overflow: hidden; }
+  .sh::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: var(--c); }
+  .sh .top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .sh h3 { font: 700 19px/1.2 "Unbounded", sans-serif; margin: 0; }
+  .sh .mach { color: var(--muted); font-size: 12.5px; }
+  .sh .route { color: var(--muted); font-size: 13px; margin: 2px 0 10px; }
+  .big { display: flex; align-items: baseline; gap: 8px; }
+  .big b { font: 600 34px/1 "IBM Plex Mono", monospace; }
+  .big span { color: var(--muted); }
+  .bar { height: 10px; border-radius: 5px; background: #ebe8e2; margin: 10px 0 6px; position: relative; overflow: visible; }
+  .bar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 5px; background: var(--c); }
+  .bar em { position: absolute; top: -3px; bottom: -3px; border-radius: 3px; background: rgba(29,37,41,.14); border: 1px solid rgba(29,37,41,.25); }
+  .marks { position: relative; height: 18px; font-size: 11px; color: var(--muted); }
+  .marks span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 10px 0 8px; }
+  .stats div { background: #f6f5f1; border-radius: 10px; padding: 8px 10px; }
+  .stats b { display: block; font: 600 16px/1.2 "IBM Plex Mono", monospace; }
+  .stats span { font-size: 11.5px; color: var(--muted); }
+  .note { font-size: 12.5px; color: var(--muted); margin-top: 8px; }
+  .hist { margin-top: 6px; }
+  .hist table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .hist td { padding: 3px 0; border-top: 1px solid var(--line); }
+  .hist td:last-child { text-align: right; font-family: "IBM Plex Mono", monospace; }
+  .foot { margin-top: 28px; color: var(--muted); font-size: 12.5px; }
+  .foot a { color: inherit; }
+  .tag { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 10px; background: #f0ece4; color: var(--muted); margin-left: 6px; vertical-align: middle; }
+  @media (max-width: 560px) { h1 { font-size: 22px; } .stats { grid-template-columns: 1fr 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav><a href="./">Карта</a><a href="rings.html" class="on">Сводка по кольцам</a><a href="card.html">Кадр для поста</a><a href="diorama.html">Диорама</a></nav>
+  <div class="eyebrow" id="eb"></div>
+  <h1>Сводка по кольцам</h1>
+  <p class="lead" id="lead"></p>
+  <div class="kpis" id="kpis"></div>
+  <div class="line-strip"><h2>Перегоны и щиты на линии</h2><div id="strip"></div></div>
+  <div class="grid" id="grid"></div>
+  <div class="foot">Данные: <a href="https://t.me/podzemnik_spb">«Подземник»</a>, городские СМИ. Скорость считается по двум последним замерам, прогноз — при той же скорости. Метры, где они пересчитаны из колец, примерные.</div>
+</div>
+<script src="rings.js?v=2"></script>
+</body>
+</html>
