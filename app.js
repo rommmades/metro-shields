@@ -418,7 +418,7 @@
     let txt;
     if (r >= shield.total) txt = 'Проходка участка завершена';
     else if (inside) txt = 'Щит проходит «' + inside.name + '»';
-    else if (next && next.from < shield.total) txt = 'До «' + next.name + '» ' + fmt(next.from - r) + u;
+    else if (next && next.from <= shield.total) txt = 'До «' + next.name + '» ' + fmt(next.from - r) + u;
     else txt = 'До финиша ' + fmt(shield.total - r) + u;
     $('p-next').textContent = txt;
     UG.dirty = true;

@@ -9,7 +9,7 @@
    "line": "Красносельско-Калининская линия (коричневая), 2-й участок",
    "color": "#e3a21a",
    "ring": 400,
-   "total": 2500,
+   "total": 2444,
    "started": "2026-06-09",
    "depth": 60,
    "path": [
@@ -148,12 +148,20 @@
     },
     {
      "name": "Заставская",
-     "from": 2522,
-     "to": 2662,
-     "escalator": "from"
+     "from": 2444,
+     "to": 2584,
+     "vestibule": {
+      "lnglat": [
+       30.3128,
+       59.8908
+      ],
+      "address": "подземный, вдоль Парфёновской ул. между Старообрядческой и Заставской ул.; 4 павильона на углах",
+      "source": "описание вестибюля: dp.ru 28.01.2026, gorodovoy.ru 23.09.2026",
+      "approx": true
+     }
     }
    ],
-   "note": "Вестибюли «Каретной», «Боровой» и шахты — по адресам из тендера на площадки (2025). Положение «Заставской» примерное",
+   "note": "Первый тоннель Каретная — Боровая: около 450 из 900 м на 03.11.2026. Вестибюли «Каретной» и «Боровой» и шахты по адресам из тендера (2025); вестибюль «Заставской» по описанию, примерно",
    "history": [
     {
      "date": "2026-06-09",
@@ -512,6 +520,9 @@
      "address": "Рощинская улица, 3",
      "source": "тендер на подготовку площадок, Фонтанка 04.03.2025"
     }
+   ],
+   "sources": [
+    "https://spbdnevnik.ru/news/2026-11-03/na-vtorom-ucastke-koricnevoi-vetki-metro-prodolzaetsia-proxodka-peregonnyx-tonnelei"
    ]
   },
   {
@@ -522,8 +533,8 @@
    "color": "#d2691e",
    "lineColor": "#b8885c",
    "unit": "m",
-   "ring": 1022,
-   "total": 3532,
+   "ring": 1660,
+   "total": 3424,
    "started": "2025-10-14",
    "depth": 60,
    "path": [
@@ -623,11 +634,20 @@
     },
     {
      "name": "Заставская",
-     "from": 3532,
-     "to": 3731
+     "from": 3424,
+     "to": 3623,
+     "vestibule": {
+      "lnglat": [
+       30.3128,
+       59.8908
+      ],
+      "address": "подземный, вдоль Парфёновской ул. между Старообрядческой и Заставской ул.; 4 павильона на углах",
+      "source": "описание вестибюля: dp.ru 28.01.2026, gorodovoy.ru 23.09.2026",
+      "approx": true
+     }
     }
    ],
-   "note": "Стартовала с шахты № 852 к «Боровой», 05.09.2026 дошла до станции; дальше идёт к «Заставской». Метры примерные",
+   "note": "Второй тоннель. Стартовала 14.10.2025 с шахты № 852, прошла «Боровую»; на 03.11.2026 около 300 из 1800 колец до «Заставской». Метры пересчитаны из колец (~1,2 м), примерные",
    "existing": [
     {
      "name": "Обводный канал",
@@ -930,11 +950,16 @@
     {
      "date": "2026-09-05",
      "ring": 1022
+    },
+    {
+     "date": "2026-11-03",
+     "ring": 1660
     }
    ],
    "sources": [
     "https://spbdnevnik.ru/news/2026-06-20/shchit-vera-pochti-doshel-do-granitsy-budushchey-stantsii-metro-borovaya",
-    "https://gorodovoy.ru/news/umnye-poezda-i-novye-stancii-kak-stroyat-korichnevuyu-vetku-metro-v-peterburge_id912019_a184_c5_dp260905"
+    "https://gorodovoy.ru/news/umnye-poezda-i-novye-stancii-kak-stroyat-korichnevuyu-vetku-metro-v-peterburge_id912019_a184_c5_dp260905",
+    "https://spbdnevnik.ru/news/2026-11-03/na-vtorom-ucastke-koricnevoi-vetki-metro-prodolzaetsia-proxodka-peregonnyx-tonnelei"
    ]
   },
   {
