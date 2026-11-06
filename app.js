@@ -106,7 +106,22 @@
       scene.add(new THREE.Mesh(new THREE.TubeGeometry(sub, 24, R * 2.2, 8, false), s.pilot ? mat(accent, 0.45) : mat(0xffffff, 0.92)));
       const mid = curve.getPointAt((t1 + t2) / 2);
       let labelAt = [mid.x, mid.y];
-      if (s.escalator) {
+      if (s.vestibule && s.vestibule.lnglat) {
+        // Вестибюль по реальному адресу: эскалатор от ближнего торца станции к нему
+        const [vx, vy] = toLocal(s.vestibule.lnglat);
+        const e1 = curve.getPointAt(t1), e2 = curve.getPointAt(t2);
+        const d1 = Math.hypot(e1.x - vx, e1.y - vy), d2 = Math.hypot(e2.x - vx, e2.y - vy);
+        const base = d1 < d2 ? e1 : e2;
+        const top = new THREE.Vector3(vx, vy, -6);
+        const esc = new THREE.Mesh(new THREE.CylinderGeometry(4.5, 4.5, base.distanceTo(top), 12), mat(0xf4efe6, 0.9));
+        esc.position.copy(base).add(top).multiplyScalar(0.5);
+        esc.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), top.clone().sub(base).normalize());
+        scene.add(esc);
+        const dir = new THREE.Vector2(vx - base.x, vy - base.y).normalize();
+        const vest = new THREE.Mesh(new THREE.BoxGeometry(42, 26, 9), mat(lineCol, 0.95));
+        vest.position.set(vx, vy, 4.5); vest.rotation.z = Math.atan2(dir.y, dir.x); scene.add(vest);
+        labelAt = [vx, vy];
+      } else if (s.escalator) {
         const atEnd = s.escalator === 'to';
         const tEnd = atEnd ? t2 : t1;
         const base = curve.getPointAt(tEnd);
@@ -132,19 +147,31 @@
 
     // Вентиляционные шахты: ствол от тоннеля до поверхности и киоск наверху
     (shield.shafts || []).forEach((v, i) => {
-      const t = Math.min(1, Math.max(0, tOfRing(v.ring)));
-      const p = curve.getPointAt(t), tan = curve.getTangentAt(t).setZ(0).normalize();
-      const off = new THREE.Vector3(-tan.y, tan.x, 0).multiplyScalar(R * 3.2); // сбоку от тоннеля
-      const top = new THREE.Vector3(p.x + off.x, p.y + off.y, 0);
+      let p, top;
+      if (v.lnglat) {
+        // Шахта по адресу: ствол там, где площадка, и горизонтальная сбойка к ближайшей точке тоннеля
+        const [sx, sy] = toLocal(v.lnglat);
+        let best = 1e9, bt = 0;
+        for (let k = 0; k <= 400; k++) { const q = curve.getPointAt(k / 400), dd = (q.x - sx) ** 2 + (q.y - sy) ** 2; if (dd < best) { best = dd; bt = k / 400; } }
+        if (Math.sqrt(best) > 400) return; // площадка далеко от этого участка
+        p = curve.getPointAt(bt); top = new THREE.Vector3(sx, sy, 0);
+      } else {
+        const t = Math.min(1, Math.max(0, tOfRing(v.ring)));
+        p = curve.getPointAt(t); const tan = curve.getTangentAt(t).setZ(0).normalize();
+        const o = new THREE.Vector3(-tan.y, tan.x, 0).multiplyScalar(R * 3.2);
+        top = new THREE.Vector3(p.x + o.x, p.y + o.y, 0);
+      }
+      const off = new THREE.Vector3(top.x - p.x, top.y - p.y, 0);
+      if (off.length() < 1) off.set(R * 3, 0, 0), top.set(p.x + off.x, p.y + off.y, 0);
       const shaft = new THREE.Mesh(new THREE.CylinderGeometry(4, 4, D, 12), mat(0xb9c3c8, 0.85));
       shaft.rotation.x = Math.PI / 2; shaft.position.set(top.x, top.y, -D / 2); scene.add(shaft);
       const link = new THREE.Mesh(new THREE.CylinderGeometry(3, 3, off.length(), 8), mat(0xb9c3c8, 0.85));
-      link.position.set(p.x + off.x / 2, p.y + off.y / 2, -D);
+      link.position.set(p.x + off.x / 2, p.y + off.y / 2, p.z);
       link.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), off.clone().normalize()); scene.add(link);
       const kiosk = new THREE.Mesh(new THREE.BoxGeometry(12, 12, 7), mat(0x7d878c, 1));
       kiosk.position.set(top.x, top.y, 3.5); scene.add(kiosk);
       const name = v.name || 'Вентшахта';
-      markers.push(label(name, toLngLat(top.x, top.y), 'vs'));
+      markers.push(label(name + (v.note ? ' <small>' + v.note + '</small>' : ''), toLngLat(top.x, top.y), 'vs'));
       ugLabels.push({ html: name, pos: new THREE.Vector3(top.x, top.y, 12), cls: 'vs' });
     });
     (shield.existing || DATA.existing || []).forEach(e => {
