@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Кадр прогресса — щиты метро СПб</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@600;700&family=Golos+Text:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+  html, body { margin: 0; background: #0f1416; color: #e6ebec; font: 14px/1.4 "Golos Text", system-ui, sans-serif; }
+  .bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 10px 14px; }
+  .bar button, .bar select { font: inherit; font-size: 13px; padding: 5px 12px; border-radius: 8px; border: 1px solid #3a4448; background: #1e2427; color: #e6ebec; cursor: pointer; }
+  .bar button.primary { background: #c98a55; border-color: #c98a55; color: #111; font-weight: 600; }
+  .bar .hint { color: #8d9a9f; font-size: 12.5px; }
+  #frame { position: relative; margin: 0 14px 14px; outline: 1px solid #2c3437; }
+  #map, #ov { position: absolute; inset: 0; }
+  #ov { pointer-events: none; }
+  .maplibregl-ctrl-attrib { display: none; }
+</style>
+</head>
+<body>
+<div class="bar">
+  <button id="b-png" class="primary">Скачать PNG</button>
+  <select id="size" aria-label="Размер кадра">
+    <option value="1600x1000">1600 × 1000 (широкий)</option>
+    <option value="1280x1280">1280 × 1280 (квадрат)</option>
+    <option value="1080x1350">1080 × 1350 (вертикальный)</option>
+  </select>
+  <button id="b-fit">Вписать участок</button>
+  <button id="b-link">Ссылка на этот кадр</button>
+  <span class="hint">Карту можно двигать и вращать: левая кнопка мыши вращает, правая сдвигает, колесо меняет масштаб.</span>
+</div>
+<div id="frame"><div id="map"></div><canvas id="ov"></canvas></div>
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="card.js?v=1"></script>
+</body>
+</html>
