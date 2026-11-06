@@ -76,3 +76,9 @@ body.ug .maplibregl-ctrl-top-right { display: none; }
 .map-hint { position: fixed; z-index: 2; right: 56px; top: 12px; background: rgba(255,255,255,.85); padding: 2px 8px; border-radius: 6px; }
 body.ug .map-hint, body.edit .map-hint { display: none; }
 @media (max-width: 640px), (hover: none) { .map-hint { display: none; } }
+
+#clean-tip { position: fixed; z-index: 5; left: 50%; top: 14px; transform: translateX(-50%); background: rgba(29,37,41,.85); color: #fff; padding: 6px 12px; border-radius: 8px; opacity: 0; pointer-events: none; transition: opacity .4s; }
+#clean-tip.show { opacity: 1; }
+body.clean .panel, body.clean .dock, body.clean .editbox, body.clean .map-hint, body.clean .maplibregl-ctrl-top-right,
+body.clean .back, body.clean .under-hint { display: none !important; }
+body.clean .attrib { opacity: .75; }

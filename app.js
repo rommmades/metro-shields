@@ -45,7 +45,7 @@
   let scene, ugGroup, ugLabels = [];
 
   Promise.all([fetch('data/shields.json', { cache: 'no-cache' }).then(r => r.json()), new Promise(res => map.on('load', res))])
-    .then(([d]) => { DATA = d; tuneStyle(); setupPicker(); pick(qs.get('shield') || DATA.shields[0].id); setupEdit(); if (qs.has('under')) openUnder(); })
+    .then(([d]) => { DATA = d; tuneStyle(); setupPicker(); pick(qs.get('shield') || DATA.shields[0].id); setupEdit(); applyCam(); if (qs.has('under')) openUnder(); })
     .catch(e => { console.error(e); $('p-next').textContent = 'Не удалось загрузить данные.'; });
 
   // --- Стиль карты: убираем лишние значки, делаем дома спокойными и полупрозрачными ---
@@ -565,4 +565,27 @@
   $('b-all').onclick = () => { if (UG.open) closeUnder(); overview(true); };
   $('b-under').onclick = () => UG.open ? closeUnder() : openUnder();
   $('b-back').onclick = closeUnder;
+
+  // --- Ракурсы и чистый кадр для скриншотов ---
+  // Ссылка вида #cam=lng,lat,zoom,bearing,pitch открывает карту ровно в этом ракурсе
+  function applyCam() {
+    const m = location.hash.match(/cam=([-\d.,]+)/); if (!m) return;
+    const [lng, lat, zoom, bearing, pitch] = m[1].split(',').map(Number);
+    if (isFinite(lng) && isFinite(lat)) map.jumpTo({ center: [lng, lat], zoom, bearing, pitch });
+  }
+  $('b-link').onclick = () => {
+    const c = map.getCenter(), f = n => +n.toFixed(5);
+    const u = new URL(location.href); u.searchParams.delete('edit'); u.searchParams.set('shield', shield.id);
+    u.hash = 'cam=' + [f(c.lng), f(c.lat), f(map.getZoom()), +map.getBearing().toFixed(1), +map.getPitch().toFixed(1)].join(',');
+    history.replaceState(null, '', u.pathname + u.search + u.hash);
+    navigator.clipboard.writeText(u.href).then(() => { $('b-link').textContent = 'Скопировано'; setTimeout(() => $('b-link').textContent = 'Ссылка на ракурс', 1500); });
+  };
+  let tipT = 0;
+  function setClean(on) {
+    document.body.classList.toggle('clean', on);
+    if (on) { $('clean-tip').classList.add('show'); clearTimeout(tipT); tipT = setTimeout(() => $('clean-tip').classList.remove('show'), 2500); }
+    map.resize(); if (UG.open) UG.dirty = true;
+  }
+  $('b-shot').onclick = () => setClean(true);
+  addEventListener('keydown', e => { if (e.key === 'Escape' && document.body.classList.contains('clean')) setClean(false); });
 })();

@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@600;700&family=Golos+Text:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
-<link rel="stylesheet" href="style.css?v=10">
+<link rel="stylesheet" href="style.css?v=11">
 </head>
 <body>
 <div id="map"></div>
@@ -33,10 +33,14 @@
     <button id="b-follow">К щиту</button>
     <button id="b-all">Весь участок</button>
     <button id="b-under" class="primary">Под землю</button>
+    <button id="b-shot" title="Спрятать панели для скриншота (выход — Esc)">Чистый кадр</button>
+    <button id="b-link" title="Ссылка, которая откроет карту ровно в этом ракурсе">Ссылка на ракурс</button>
   </div>
 </section>
 
 <div class="map-hint muted small">Левая кнопка мыши — вращать и наклонять, правая — сдвигать, колесо — масштаб</div>
+
+<div id="clean-tip" class="small">Чистый кадр: сделайте скриншот (Win+Shift+S). Выход — Esc</div>
 
 <div id="under" hidden>
   <div id="under-labels"></div>
@@ -49,6 +53,6 @@
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <script src="https://unpkg.com/three@0.128.0/build/three.min.js"></script>
 <script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-<script src="app.js?v=10"></script>
+<script src="app.js?v=11"></script>
 </body>
 </html>
