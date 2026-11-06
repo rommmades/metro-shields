@@ -11,7 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: |
-          grep -v '^#' .github/area-request.txt | while read n s w no e; do [ -n "$n" ] && python tools/fetch_area.py $n $s $w $no $e; sleep 3; done
+          grep -v '^#' .github/area-request.txt | while read n s w no e; do [ -n "$n" ] && (python tools/fetch_area.py $n $s $w $no $e || echo "не удалось: $n"); sleep 3; done
       - run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898283+github-actions[bot]@users.noreply.github.com"

@@ -9,14 +9,19 @@ q = f"""[out:json][timeout:120];
 (way["building"]({bb}); way["highway"]({bb}); way["railway"="rail"]({bb});
  way["natural"="water"]({bb}); way["waterway"~"canal|river"]({bb}); way["leisure"="park"]({bb}); way["landuse"~"grass|forest"]({bb}););
 out geom;"""
-for host in ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter"]:
-    try:
-        req = urllib.request.Request(host, data=urllib.parse.urlencode({"data": q}).encode(), headers={"User-Agent": "metro-shields/1.0"})
-        res = json.load(urllib.request.urlopen(req, timeout=180)); break
-    except Exception as ex:
-        print("fail", host, ex); time.sleep(5)
-else:
-    sys.exit(1)
+HOSTS = ["https://overpass-api.de/api/interpreter", "https://overpass.private.coffee/api/interpreter",
+         "https://maps.mail.ru/osm/tools/overpass/api/interpreter", "https://overpass.kumi.systems/api/interpreter"]
+res = None
+for attempt in range(3):                       # серверы Overpass бывают перегружены: несколько зеркал и повторы
+    for host in HOSTS:
+        try:
+            req = urllib.request.Request(host, data=urllib.parse.urlencode({"data": q}).encode(), headers={"User-Agent": "metro-shields/1.0"})
+            res = json.load(urllib.request.urlopen(req, timeout=180)); break
+        except Exception as ex:
+            print("fail", host, ex); time.sleep(5)
+    if res: break
+    time.sleep(60)
+if not res: sys.exit(1)
 
 def hgt(t):
     for k in ("height", "building:height"):
