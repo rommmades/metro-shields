@@ -73,3 +73,6 @@ body.ug .maplibregl-ctrl-top-right { display: none; }
 #under-labels .lbl.sh.other { pointer-events: none; }
 .lbl.new, .lbl.hall { z-index: 2; }
 .lbl.drag:hover { z-index: 3; }
+.map-hint { position: fixed; z-index: 2; right: 56px; top: 12px; background: rgba(255,255,255,.85); padding: 2px 8px; border-radius: 6px; }
+body.ug .map-hint, body.edit .map-hint { display: none; }
+@media (max-width: 640px), (hover: none) { .map-hint { display: none; } }

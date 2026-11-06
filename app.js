@@ -16,8 +16,29 @@
 
   const map = new maplibregl.Map({
     container: 'map', style: STYLE, center: [30.335, 59.903], zoom: 13.6, pitch: 55, bearing: -20,
-    maxPitch: 80, antialias: true, attributionControl: false
+    maxPitch: 85, antialias: true, attributionControl: false
   });
+
+  // Мышью — как под землёй: левая кнопка вращает и наклоняет, правая (или Shift) сдвигает карту.
+  // Касания остаются за MapLibre: одним пальцем сдвиг, двумя — поворот, наклон и масштаб.
+  (() => {
+    const cv = map.getCanvas(); let drag = null, lastTouch = 0;
+    cv.addEventListener('touchstart', () => lastTouch = Date.now(), { passive: true });
+    cv.addEventListener('mousedown', e => {
+      if (Date.now() - lastTouch < 800) return;
+      e.stopPropagation(); e.preventDefault();
+      drag = { pan: e.button !== 0 || e.shiftKey, x: e.clientX, y: e.clientY };
+      cv.style.cursor = 'grabbing';
+    });
+    addEventListener('mousemove', e => {
+      if (!drag) return;
+      const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.x = e.clientX; drag.y = e.clientY;
+      if (drag.pan) map.panBy([-dx, -dy], { animate: false });
+      else map.jumpTo({ bearing: map.getBearing() - dx * 0.35, pitch: Math.max(0, Math.min(85, map.getPitch() - dy * 0.3)) });
+    });
+    addEventListener('mouseup', () => { if (drag) { drag = null; cv.style.cursor = ''; } });
+    cv.addEventListener('contextmenu', e => e.preventDefault());
+  })();
   map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');
 
   let DATA, shield, origin, S, layer, markers = [];
@@ -101,6 +122,54 @@
 
     // Станционные комплексы: зал на глубине, наклонный эскалаторный ход, наземный вестибюль
     const Z = new THREE.Vector3(0, 0, 1);
+    const UPY = new THREE.Vector3(0, 1, 0);
+    const M = {
+      esc: mat(0xf4efe6, 0.5), lane: mat(0x6f6760, 1), cham: mat(0xe6dfd2, 0.95),
+      shaft: mat(0xb9c3c8, 0.6), gal: mat(0xa9b4ba, 0.95), kiosk: mat(0x7d878c, 1), grille: mat(0x3d4549, 1), vest: mat(lineCol, 0.95)
+    };
+    // Цилиндр между двумя точками (тоннели из тюбингов круглые)
+    function rod(a, b, r, m, seg = 20) {
+      const c = new THREE.Mesh(new THREE.CylinderGeometry(r, r, a.distanceTo(b), seg), m);
+      c.position.copy(a).add(b).multiplyScalar(0.5);
+      c.quaternion.setFromUnitVectors(UPY, b.clone().sub(a).normalize()); scene.add(c); return c;
+    }
+    // Камера/выработка-коробка, повёрнутая по направлению (dx, dy)
+    function box(cx, cy, cz, len, w, h, dx, dy, m) {
+      const g = new THREE.Mesh(new THREE.BoxGeometry(len, w, h), m);
+      g.position.set(cx, cy, cz); g.rotation.z = Math.atan2(dy, dx); scene.add(g); return g;
+    }
+    // Эскалаторный комплекс глубокой станции: переход из торца зала → нижняя натяжная камера →
+    // наклонный ход под 30° с тремя эскалаторами → верхняя камера (машинный зал) → наземный вестибюль
+    function escalatorComplex(base, vx, vy) {
+      const d = new THREE.Vector2(vx - base.x, vy - base.y), dist = d.length(); d.normalize();
+      const zb = base.z, zt = -6;
+      const real = shield.depth / Math.tan(ESC_ANGLE * Math.PI / 180); // горизонтальный вынос хода при реальной глубине
+      const run = Math.max(30, Math.min(real, dist - 20));
+      const T = new THREE.Vector3(vx - d.x * 14, vy - d.y * 14, zt);       // верхняя камера под вестибюлем
+      const B = new THREE.Vector3(T.x - d.x * run, T.y - d.y * run, zb);    // низ наклона, на уровне зала
+      // переход от торца зала к нижней камере (может идти назад, если вестибюль рядом со станцией)
+      const pa = new THREE.Vector3(base.x, base.y, zb), pl = Math.hypot(B.x - pa.x, B.y - pa.y);
+      if (pl > 2) box((pa.x + B.x) / 2, (pa.y + B.y) / 2, zb, pl + 8, 12, 10, B.x - pa.x, B.y - pa.y, M.cham);
+      box(B.x, B.y, zb + 1, 20, 18, 14, d.x, d.y, M.cham);                  // нижняя натяжная камера
+      box(T.x, T.y, zt, 22, 18, 12, d.x, d.y, M.cham);                      // верхняя камера, машинное помещение
+      const a = B.clone().add(new THREE.Vector3(d.x * 8, d.y * 8, 3)), b = T.clone().add(new THREE.Vector3(-d.x * 9, -d.y * 9, -2));
+      rod(a, b, 6.5, M.esc, 24);                                             // наклонный ход Ø ≈ 10 м
+      const side = new THREE.Vector3(-d.y, d.x, 0);
+      [-3, 0, 3].forEach(k => { const o = side.clone().multiplyScalar(k).add(new THREE.Vector3(0, 0, -2.2)); rod(a.clone().add(o), b.clone().add(o), 0.7, M.lane, 6); });
+      box(vx, vy, 4.5, 42, 26, 9, d.x, d.y, M.vest);                        // наземный вестибюль
+    }
+    // Вентиляционная шахта: ствол из тюбингов → вентиляционная камера внизу → сбойка к перегонным тоннелям,
+    // наверху оголовок и вентиляционный киоск с решётками
+    function shaftComplex(p, top, off) {
+      const z0 = p.z, u = off.clone().normalize();
+      rod(new THREE.Vector3(top.x, top.y, z0 + 4), new THREE.Vector3(top.x, top.y, 0.5), 4.5, M.shaft, 20);
+      box(top.x, top.y, z0, 18, 16, 14, u.x, u.y, M.cham);                   // вентиляционная камера
+      const far = new THREE.Vector3(p.x - u.x * 22, p.y - u.y * 22, z0);      // сбойка проходит через тоннель к соседнему
+      box((top.x + far.x) / 2, (top.y + far.y) / 2, z0, Math.hypot(top.x - far.x, top.y - far.y), 6.5, 7.5, u.x, u.y, M.gal);
+      rod(new THREE.Vector3(top.x, top.y, -1), new THREE.Vector3(top.x, top.y, 1.5), 6, M.kiosk, 20); // оголовок
+      box(top.x, top.y, 4, 16, 10, 5, u.x, u.y, M.kiosk);                    // киоск
+      box(top.x, top.y, 6.6, 14, 8, 0.4, u.x, u.y, M.grille);                // решётка
+    }
     shield.stations.forEach(s => {
       const t1 = Math.max(0, tOfRing(s.from)), t2 = Math.min(1, tOfRing(s.to));
       if (t2 <= t1) return;
@@ -109,38 +178,22 @@
       const mid = curve.getPointAt((t1 + t2) / 2);
       let labelAt = [mid.x, mid.y];
       if (s.vestibule && s.vestibule.lnglat) {
-        // Вестибюль по реальному адресу: эскалатор от ближнего торца станции к нему
+        // Вестибюль по реальному адресу: эскалаторный комплекс от ближнего торца станции к нему
         const [vx, vy] = toLocal(s.vestibule.lnglat);
         const e1 = curve.getPointAt(t1), e2 = curve.getPointAt(t2);
-        const d1 = Math.hypot(e1.x - vx, e1.y - vy), d2 = Math.hypot(e2.x - vx, e2.y - vy);
-        const base = d1 < d2 ? e1 : e2;
-        const top = new THREE.Vector3(vx, vy, -6);
-        const esc = new THREE.Mesh(new THREE.CylinderGeometry(4.5, 4.5, base.distanceTo(top), 12), mat(0xf4efe6, 0.9));
-        esc.position.copy(base).add(top).multiplyScalar(0.5);
-        esc.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), top.clone().sub(base).normalize());
-        scene.add(esc);
-        const dir = new THREE.Vector2(vx - base.x, vy - base.y).normalize();
-        const vest = new THREE.Mesh(new THREE.BoxGeometry(42, 26, 9), mat(lineCol, 0.95));
-        vest.position.set(vx, vy, 4.5); vest.rotation.z = Math.atan2(dir.y, dir.x); scene.add(vest);
+        const base = Math.hypot(e1.x - vx, e1.y - vy) < Math.hypot(e2.x - vx, e2.y - vy) ? e1 : e2;
+        escalatorComplex(base, vx, vy);
         labelAt = [vx, vy];
       } else if (s.escalator) {
+        // Адреса нет: наклонный ход продолжает ось станции за её торцом
         const atEnd = s.escalator === 'to';
         const tEnd = atEnd ? t2 : t1;
         const base = curve.getPointAt(tEnd);
         const dir = curve.getTangentAt(tEnd).setZ(0).normalize().multiplyScalar(atEnd ? 1 : -1);
-        const run = D / Math.tan(ESC_ANGLE * Math.PI / 180);
-        const top = new THREE.Vector3(base.x + dir.x * run, base.y + dir.y * run, -6);
-        const len = base.distanceTo(top);
-        const esc = new THREE.Mesh(new THREE.CylinderGeometry(4.5, 4.5, len, 12), mat(0xf4efe6, 0.9));
-        esc.position.copy(base).add(top).multiplyScalar(0.5);
-        esc.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), top.clone().sub(base).normalize());
-        scene.add(esc);
-        // Вестибюль: прямоугольный павильон на поверхности, повёрнут по оси эскалатора
-        const vest = new THREE.Mesh(new THREE.BoxGeometry(42, 26, 9), mat(lineCol, 0.95));
-        vest.position.set(top.x + dir.x * 14, top.y + dir.y * 14, 4.5);
-        vest.rotation.z = Math.atan2(dir.y, dir.x);
-        scene.add(vest);
-        labelAt = [vest.position.x, vest.position.y];
+        const run = shield.depth / Math.tan(ESC_ANGLE * Math.PI / 180) + 40;
+        const vx = base.x + dir.x * run, vy = base.y + dir.y * run;
+        escalatorComplex(base, vx, vy);
+        labelAt = [vx, vy];
       }
       const ll = toLngLat(labelAt[0], labelAt[1]);
       markers.push(label(s.name + (s.pilot ? ' <small>пилотный тоннель</small>' : ''), ll, 'new', { type: 'vest', s }));
@@ -166,13 +219,7 @@
       }
       const off = new THREE.Vector3(top.x - p.x, top.y - p.y, 0);
       if (off.length() < 1) off.set(R * 3, 0, 0), top.set(p.x + off.x, p.y + off.y, 0);
-      const shaft = new THREE.Mesh(new THREE.CylinderGeometry(4, 4, D, 12), mat(0xb9c3c8, 0.85));
-      shaft.rotation.x = Math.PI / 2; shaft.position.set(top.x, top.y, -D / 2); scene.add(shaft);
-      const link = new THREE.Mesh(new THREE.CylinderGeometry(3, 3, off.length(), 8), mat(0xb9c3c8, 0.85));
-      link.position.set(p.x + off.x / 2, p.y + off.y / 2, p.z);
-      link.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), off.clone().normalize()); scene.add(link);
-      const kiosk = new THREE.Mesh(new THREE.BoxGeometry(12, 12, 7), mat(0x7d878c, 1));
-      kiosk.position.set(top.x, top.y, 3.5); scene.add(kiosk);
+      shaftComplex(p, top, off);
       const name = v.name || 'Вентшахта';
       markers.push(label(name + (v.note ? ' <small>' + v.note + '</small>' : ''), toLngLat(top.x, top.y), 'vs', { type: 'shaft', v }));
       ugLabels.push({ html: name, pos: new THREE.Vector3(top.x, top.y, 12), cls: 'vs' });
@@ -491,6 +538,7 @@
       }
     }
   };
+  if (qs.has('debug')) window.__dbg = { UG, toLocal: ll => toLocal(ll) };
   function openUnder() {
     if (!UG.renderer) UG.init();
     UG.open = true; $('under').hidden = false; document.body.classList.add('ug');
