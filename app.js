@@ -55,7 +55,9 @@
     document.documentElement.style.setProperty('--accent', shield.color || '#e3a21a');
     $('p-line').textContent = shield.line;
     $('p-name').textContent = 'Щит «' + shield.name + '»';
-    $('p-of').textContent = 'колец из ~' + fmt(shield.total);
+    const M = shield.unit === 'm';
+    $('p-of').textContent = (M ? 'м из ~' : 'колец из ~') + fmt(shield.total);
+    $('ring').step = M ? 20 : 10;
     $('p-note').textContent = [shield.note, 'Обновлено ' + new Date(DATA.updated).toLocaleDateString('ru-RU')].filter(Boolean).join('. ') + '.';
     const r = $('ring'); r.max = shield.total; r.value = shield.ring;
     buildScene();
@@ -98,7 +100,7 @@
       shaft.rotation.x = Math.PI / 2; shaft.position.set(mid.x, mid.y, -D / 2); scene.add(shaft);
       markers.push(label(s.name, toLngLat(mid.x, mid.y), 'new'));
     });
-    (DATA.existing || []).forEach(e => markers.push(label(`${e.name} <small>${e.line}</small>`, e.lnglat, 'ex')));
+    (shield.existing || DATA.existing || []).forEach(e => markers.push(label(`${e.name} <small>${e.line}</small>`, e.lnglat, 'ex')));
 
     // Пройденная часть и щит
     const doneMat = mat(0x39474f, 1);
@@ -174,7 +176,7 @@
     r = +r;
     const t = Math.min(1, Math.max(0, tOfRing(r)));
     layer.setT(t);
-    layer.shLabel.getElement().innerHTML = '«' + shield.name + '» · <span class="mono">кольцо ' + fmt(r) + '</span>';
+    layer.shLabel.getElement().innerHTML = '«' + shield.name + '» · <span class="mono">' + (r >= shield.total ? 'финиш' : unitTxt(r)) + '</span>';
     const n = Math.max(2, Math.round(t * 199));
     const fc = { type: 'FeatureCollection', features: [
       { type: 'Feature', properties: { k: 'all' }, geometry: { type: 'LineString', coordinates: layer.line } },
@@ -182,24 +184,27 @@
     map.getSource('route').setData(fc);
     $('p-ring').textContent = fmt(r);
     $('p-bar').style.width = Math.min(100, r / shield.total * 100) + '%';
-    $('ring-out').textContent = 'кольцо ' + fmt(r);
+    $('ring-out').textContent = unitTxt(r);
     const st = shield.stations.filter(s => s.to > 0);
     const inside = st.find(s => r >= s.from && r <= s.to);
     const next = st.find(s => s.from > r);
     let txt;
-    if (inside) txt = 'Щит проходит «' + inside.name + '»';
-    else if (next && next.from < shield.total) txt = 'До «' + next.name + '» ' + fmt(next.from - r) + ' колец';
-    else if (r < shield.total) txt = 'До финиша ' + fmt(shield.total - r) + ' колец';
+    if (r >= shield.total) txt = 'Проходка участка завершена';
+    else if (inside) txt = 'Щит проходит «' + inside.name + '»';
+    else if (next && next.from < shield.total) txt = 'До «' + next.name + '» ' + fmt(next.from - r) + (shield.unit === 'm' ? ' м' : ' колец');
+    else if (r < shield.total) txt = 'До финиша ' + fmt(shield.total - r) + (shield.unit === 'm' ? ' м' : ' колец');
     else txt = 'Проходка участка завершена';
     $('p-next').textContent = txt;
   }
+
+  function unitTxt(r) { return shield.unit === 'm' ? fmt(r) + ' м' : 'кольцо ' + fmt(r); }
 
   function overview(animate = true) {
     const b = new maplibregl.LngLatBounds();
     shield.path.forEach(p => b.extend(p));
     const small = innerWidth < 640;
     const cam = map.cameraForBounds(b, { padding: small ? { top: 170, bottom: 150, left: 20, right: 20 } : { top: 60, bottom: 140, left: 380, right: 60 }, bearing: -20 });
-    const o = { center: cam.center, zoom: cam.zoom + 0.8, bearing: -20, pitch: 55 };
+    const o = { center: cam.center, zoom: cam.zoom + (small ? 0.2 : 0.8), bearing: -20, pitch: 55 };
     animate ? map.easeTo({ ...o, duration: 1200 }) : map.jumpTo(o);
   }
   function follow() { map.easeTo({ center: layer.shieldLL, zoom: 15.8, pitch: 65, duration: 1200 }); }
