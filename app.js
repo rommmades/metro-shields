@@ -21,7 +21,7 @@
   let DATA, shield, origin, S, layer, markers = [];
   let scene, ugGroup, ugLabels = [];
 
-  Promise.all([fetch('data/shields.json').then(r => r.json()), new Promise(res => map.on('load', res))])
+  Promise.all([fetch('data/shields.json', { cache: 'no-cache' }).then(r => r.json()), new Promise(res => map.on('load', res))])
     .then(([d]) => { DATA = d; tuneStyle(); setupPicker(); pick(qs.get('shield') || DATA.shields[0].id); if (qs.has('under')) openUnder(); })
     .catch(e => { console.error(e); $('p-next').textContent = 'Не удалось загрузить данные.'; });
 
