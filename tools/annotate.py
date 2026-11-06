@@ -46,7 +46,7 @@ for s in info["shields"]:
     u = " м" if s["unit"] == "m" else " колец"
     r = s["ring"]; nxt = next((x for x in s["stations"] if x[1] > r), None)
     inside = next((x for x in s["stations"] if x[1] <= r <= x[2]), None)
-    tail = ("проходит «%s»" % inside[0]) if inside else ("до «%s» %s%s" % (nxt[0], f"{round(nxt[1] - r):,}".replace(",", " "), u) if nxt else "проходка завершена")
+    tail = ("проходит станцию «%s»" % inside[0]) if inside else ("до станции «%s» %s%s" % (nxt[0], f"{round(nxt[1] - r):,}".replace(",", " "), u) if nxt else "проходка завершена")
     d.ellipse([50, y + 7, 64, y + 21], fill=hexa(s["color"]))
     d.text((74, y), "«%s»: %s%s, %s" % (s["name"], f"{round(r):,}".replace(",", " "), u, tail), font=font(21), fill=INK)
     y += 32
