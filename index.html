@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Где сейчас щиты метро СПб</title>
+<meta name="description" content="Проходка тоннелей петербургского метро в 3D: где под городом сейчас находится щит.">
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@600;700&family=Golos+Text:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="map"></div>
+
+<section class="card panel" id="panel">
+  <div class="eyebrow"><span class="dot"></span><span id="p-line"></span></div>
+  <div class="row">
+    <h1 id="p-name"></h1>
+    <select id="p-pick" aria-label="Выбрать щит" hidden></select>
+  </div>
+  <div class="big"><span id="p-ring" class="mono"></span><span class="muted" id="p-of"></span></div>
+  <div class="bar"><div id="p-bar"></div></div>
+  <div id="p-next" class="next"></div>
+  <div class="muted small" id="p-note"></div>
+</section>
+
+<section class="card dock">
+  <div class="dock-head"><span class="muted small">Посмотреть, где щит будет дальше</span><span id="ring-out" class="mono"></span></div>
+  <input id="ring" type="range" min="0" max="2500" step="10" aria-label="Кольцо">
+  <div class="btns">
+    <button id="b-now">Сейчас</button>
+    <button id="b-follow">К щиту</button>
+    <button id="b-all">Весь участок</button>
+  </div>
+</section>
+
+<div class="attrib muted small">Данные: <a href="https://t.me/podzemnik_spb" target="_blank" rel="noopener">«Подземник»</a> · карта © <a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a>, <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a></div>
+
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/three@0.128.0/build/three.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
