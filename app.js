@@ -560,7 +560,7 @@
     $('p-bar').style.width = Math.min(100, r / shield.total * 100) + '%';
     $('ring-out').textContent = unitTxt(r);
     const st = shield.stations.filter(s => s.to > 0);
-    const inside = st.find(s => r >= s.from && r <= s.to);
+    const inside = st.find(s => r >= s.from && r < s.to);
     const next = st.find(s => s.from > r);
     const u = shield.unit === 'm' ? ' м' : ' колец';
     let txt;

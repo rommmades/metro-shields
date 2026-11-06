@@ -25,7 +25,7 @@
   .line-strip { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px 12px; margin-bottom: 26px; }
   .line-strip h2, .grid h2 { font: 600 16px/1.2 "Unbounded", sans-serif; margin: 0 0 10px; }
   svg text { font-family: "Golos Text", sans-serif; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 14px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 14px; }
   .sh { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; position: relative; overflow: hidden; }
   .sh::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: var(--c); }
   .sh .top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
@@ -52,7 +52,7 @@
   .foot { margin-top: 28px; color: var(--muted); font-size: 12.5px; }
   .foot a { color: inherit; }
   .tag { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 10px; background: #f0ece4; color: var(--muted); margin-left: 6px; vertical-align: middle; }
-  @media (max-width: 560px) { h1 { font-size: 22px; } .stats { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 560px) { .grid { grid-template-columns: 1fr; } h1 { font-size: 22px; } .stats { grid-template-columns: 1fr 1fr; } }
 </style>
 </head>
 <body>
@@ -66,6 +66,6 @@
   <div class="grid" id="grid"></div>
   <div class="foot">Данные: <a href="https://t.me/podzemnik_spb">«Подземник»</a>, городские СМИ. Скорость считается по двум последним замерам, прогноз — при той же скорости. Метры, где они пересчитаны из колец, примерные.</div>
 </div>
-<script src="rings.js?v=2"></script>
+<script src="rings.js?v=4"></script>
 </body>
 </html>

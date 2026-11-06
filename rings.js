@@ -19,7 +19,7 @@
     const SH = D.shields.filter(s => (s.line || '').includes(lineKey));
     const order = ORDER[lineKey] || [];
     $('eb').textContent = (SH[0] && SH[0].line.split(',')[0]) || lineKey;
-    $('lead').textContent = 'Где каждый щит, сколько осталось до станции и с какой скоростью идёт проходка. Обновлено ' + dfmt(new Date(D.updated)) + '.';
+    $('lead').textContent = 'Где каждый щит, сколько осталось до станции и с какой скоростью идёт проходка. Обновлено ' + dfmt(new Date(D.updated));
     const m = s => s.unit === 'm' ? 1 : (s.ringLen || 1.4);           // метров в единице
     const work = SH.filter(s => s.ring < s.total);
     const passed = SH.reduce((a, s) => a + Math.max(0, s.ring) * m(s), 0);
@@ -49,7 +49,7 @@
     const u = s.unit === 'm' ? 'м' : 'колец', U = s.unit === 'm' ? ' м' : '';
     const pct = Math.max(0, Math.min(100, s.ring / s.total * 100));
     const st = (s.stations || []).filter(x => x.to > 0);
-    const inside = st.find(x => x.from <= s.ring && s.ring <= x.to), next = st.find(x => x.from > s.ring);
+    const inside = st.find(x => x.from <= s.ring && s.ring < x.to), next = st.find(x => x.from > s.ring);
     const v = spd(s);
     let eta = '—', etaSub = 'нет двух замеров';
     if (s.ring >= s.total) { eta = 'финиш'; etaSub = 'проходка завершена'; }
@@ -64,7 +64,7 @@
       <div class="bar"><i style="width:${pct}%"></i>${marks}</div>
       <div class="marks">${names}</div>
       <div class="stats">
-        <div><b>${s.ring >= s.total ? 'финиш' : inside ? 'на станции' : next ? fmt(next.from - s.ring) + ' ' + u : '—'}</b><span>${s.ring >= s.total ? 'проходка завершена' : inside ? 'проходит «' + inside.name + '»' : next ? 'до «' + next.name + '»' : ''}</span></div>
+        <div><b>${s.ring >= s.total ? 'финиш' : inside ? 'на станции' : next ? fmt(next.from - s.ring) + ' ' + u : '—'}</b><span>${s.ring >= s.total ? 'проходка завершена' : inside ? 'проходит станцию «' + inside.name + '»' : next ? 'до станции «' + next.name + '»' : ''}</span></div>
         <div><b>${v ? fmt(v.perDay * 7) + ' ' + u : '—'}</b><span>${v ? 'в неделю (' + new Date(v.from).toLocaleDateString('ru-RU') + '–' + new Date(v.to).toLocaleDateString('ru-RU') + ')' : 'скорость: нужен второй замер'}</span></div>
         <div><b>${eta}</b><span>${etaSub}</span></div>
       </div>
@@ -76,7 +76,7 @@
   // Схема линии: станции по порядку, под ними строка на каждый щит с пройденной частью
   function strip(SH, order) {
     if (!order.length) { $('strip').innerHTML = ''; return; }
-    const W = 1000, L = 70, Rt = 40, top = 34, rowH = 30, H = top + SH.length * rowH + 14;
+    const W = 1000, L = 150, Rt = 40, top = 34, rowH = 30, H = top + SH.length * rowH + 14;
     const X = i => L + i * (W - L - Rt) / (order.length - 1);
     const pos = s => {   // единицы щита → место на схеме по центрам его станций
       const an = (s.stations || []).filter(x => order.includes(x.name)).map(x => [(x.from + x.to) / 2, order.indexOf(x.name)]).sort((a, b) => a[0] - b[0]);

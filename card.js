@@ -116,7 +116,7 @@
   // --- Подписи поверх карты: заголовок, плашки щитов, источник. Рисуются в canvas, поэтому попадают в PNG ---
   function progress(sh) {
     const M = sh.unit === 'm', u = M ? ' м' : ' колец', r = sh.ring;
-    const st = sh.stations.filter(s => s.to > 0), inside = st.find(s => r >= s.from && r <= s.to), next = st.find(s => s.from > r);
+    const st = sh.stations.filter(s => s.to > 0), inside = st.find(s => r >= s.from && r < s.to), next = st.find(s => s.from > r);
     const big = fmt(r) + (M ? ' м' : ' колец');
     const sub = r >= sh.total ? 'проходка завершена' : inside ? 'проходит станцию «' + inside.name + '»' : next ? 'до станции «' + next.name + '» ' + fmt(next.from - r) + u : 'до финиша ' + fmt(sh.total - r) + u;
     return { big, sub, frac: Math.min(1, r / sh.total) };
