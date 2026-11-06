@@ -1,7 +1,7 @@
 """Скачивает из OpenStreetMap линии метро (действующие и строящиеся) и станции в заданной рамке.
 Запуск: python tools/fetch_osm.py <имя> <юг> <запад> <север> <восток>
 Результат: data/osm/<имя>.json с линиями [[lon,lat],...] и станциями."""
-import json, sys, time, urllib.request, urllib.parse
+import json, os, sys, time, urllib.request, urllib.parse
 
 name, s, w, n, e = sys.argv[1], *sys.argv[2:6]
 bbox = f"{s},{w},{n},{e}"
@@ -40,6 +40,7 @@ for el in data["elements"]:
     elif el["type"] == "node":
         stations.append({"id": el["id"], "name": t.get("name", ""), "railway": t.get("railway", ""), "station": t.get("station", ""),
                          "lnglat": [round(el["lon"], 6), round(el["lat"], 6)]})
+os.makedirs("data/osm", exist_ok=True)
 out = {"bbox": [float(s), float(w), float(n), float(e)], "ways": ways, "stations": stations}
 json.dump(out, open(f"data/osm/{name}.json", "w"), ensure_ascii=False, indent=0)
 print(len(ways), "ways,", len(stations), "stations")
