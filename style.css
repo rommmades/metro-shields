@@ -86,3 +86,12 @@ body.clean .attrib { opacity: .75; }
 .esel { display: grid; gap: 6px; padding: 8px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .esel input[type=range] { margin: 2px 0; }
 .editbox { max-height: calc(100vh - 130px); overflow: auto; }
+
+/* Слои */
+.layers { right: 12px; bottom: 150px; width: 230px; padding: 10px 14px; z-index: 5; font-size: 13.5px; }
+.layers[hidden] { display: none; }
+.layers .lay-h { font-weight: 600; margin-bottom: 6px; }
+.layers label { display: flex; gap: 8px; align-items: center; padding: 3px 0; cursor: pointer; }
+.layers input { accent-color: var(--lc, var(--ink)); }
+.lay-sep { border-top: 1px solid var(--line); margin: 6px 0; }
+body.hide-stations .lbl.new, body.hide-shafts .lbl.vs, body.hide-others .lbl.sh.other, body.hide-existing .lbl.ex { display: none !important; }

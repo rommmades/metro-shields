@@ -42,10 +42,10 @@
   map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');
 
   let DATA, shield, origin, S, layer, markers = [];
-  let scene, ugGroup, ugLabels = [];
+  let scene, ugGroup, ugLabels = [], G = {};
 
   Promise.all([fetch('data/shields.json', { cache: 'no-cache' }).then(r => r.json()), new Promise(res => map.on('load', res))])
-    .then(([d]) => { DATA = d; tuneStyle(); setupPicker(); pick(qs.get('shield') || DATA.shields[0].id); setupEdit(); applyCam(); if (qs.has('under')) openUnder(); })
+    .then(([d]) => { DATA = d; tuneStyle(); setupPicker(); setupLayers(); pick(qs.get('shield') || DATA.shields[0].id); setupEdit(); applyCam(); if (qs.has('under')) openUnder(); })
     .catch(e => { console.error(e); $('p-next').textContent = 'Не удалось загрузить данные.'; });
 
   // --- Стиль карты: убираем лишние значки, делаем дома спокойными и полупрозрачными ---
@@ -109,8 +109,12 @@
     const lineCol = new THREE.Color(shield.lineColor || '#8fa3b0');
     const lineDark = lineCol.clone().multiplyScalar(0.55);
 
+    // Группы сцены, которые можно включать и выключать в «Слоях»
+    G = { future: new THREE.Group(), stations: new THREE.Group(), shafts: new THREE.Group(), others: new THREE.Group() };
+    Object.values(G).forEach(g => scene.add(g));
+    let cur = G.stations;
     // Весь будущий тоннель — полупрозрачная труба в цвете линии
-    scene.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 500, R, 16, false), mat(lineCol, 0.38)));
+    G.future.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 500, R, 16, false), mat(lineCol, 0.38)));
     // Срез грунта: вертикальная полупрозрачная «стенка» от поверхности до тоннеля
     const wall = [], N = 240;
     for (let i = 0; i < N; i++) {
@@ -118,7 +122,7 @@
       wall.push(a.x, a.y, 0, a.x, a.y, z0, b.x, b.y, 0, a.x, a.y, z0, b.x, b.y, z0, b.x, b.y, 0);
     }
     const wg = new THREE.BufferGeometry(); wg.setAttribute('position', new THREE.Float32BufferAttribute(wall, 3));
-    scene.add(new THREE.Mesh(wg, new THREE.MeshBasicMaterial({ color: 0x9fb1bd, transparent: true, opacity: 0.1, side: THREE.DoubleSide, depthWrite: false })));
+    G.future.add(new THREE.Mesh(wg, new THREE.MeshBasicMaterial({ color: 0x9fb1bd, transparent: true, opacity: 0.1, side: THREE.DoubleSide, depthWrite: false })));
 
     // Станционные комплексы: зал на глубине, наклонный эскалаторный ход, наземный вестибюль
     const Z = new THREE.Vector3(0, 0, 1);
@@ -131,12 +135,12 @@
     function rod(a, b, r, m, seg = 20) {
       const c = new THREE.Mesh(new THREE.CylinderGeometry(r, r, a.distanceTo(b), seg), m);
       c.position.copy(a).add(b).multiplyScalar(0.5);
-      c.quaternion.setFromUnitVectors(UPY, b.clone().sub(a).normalize()); scene.add(c); return c;
+      c.quaternion.setFromUnitVectors(UPY, b.clone().sub(a).normalize()); cur.add(c); return c;
     }
     // Камера/выработка-коробка, повёрнутая по направлению (dx, dy)
     function box(cx, cy, cz, len, w, h, dx, dy, m) {
       const g = new THREE.Mesh(new THREE.BoxGeometry(len, w, h), m);
-      g.position.set(cx, cy, cz); g.rotation.z = Math.atan2(dy, dx); scene.add(g); return g;
+      g.position.set(cx, cy, cz); g.rotation.z = Math.atan2(dy, dx); cur.add(g); return g;
     }
     // Эскалаторный комплекс глубокой станции: переход из торца зала → нижняя натяжная камера →
     // наклонный ход под 30° с тремя эскалаторами → верхняя камера (машинный зал) → наземный вестибюль
@@ -171,7 +175,7 @@
       const at = (ox, oy) => [vx + ox * ca - oy * sa, vy + ox * sa + oy * ca];
       const lb = (ox, oy, oz, bl, bw, bh, m) => { const [x, y] = at(ox, -oy); box(x, y, oz, bl, bw, bh, ca, sa, m); };
       const lc = (ox, oy, oz, r, h, m, sc = 1) => { const [x, y] = at(ox, -oy), c = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 48), m);
-        c.rotation.x = Math.PI / 2; c.position.set(x, y, oz); c.scale.y = sc; scene.add(c); return c; };
+        c.rotation.x = Math.PI / 2; c.position.set(x, y, oz); c.scale.y = sc; cur.add(c); return c; };
       lb(0, -2 * k, 0.4, l + 16 * k, w + 14 * k, 0.8, W1); lb(0, -2 * k, 1.0, l + 10 * k, w + 9 * k, 0.6, W1);   // подиум, ступень
       lb(0, 0, 5.2, l - 6 * k, w - 2 * k, 8.4, W2);                                                         // лента остекления
       [-1, 1].forEach(sx => lb(sx * (l / 2 - 3 * k), 0, 5.6, 6 * k, w, 9.2, W1));                           // торцы
@@ -180,7 +184,7 @@
       const R_ = 13 * k, cy = -w / 2 + 4 * k;
       lc(0, cy, 6.2, R_, 10.4, W2); lc(0, cy, 11.8, R_ + 1.4 * k, 1.0, W1);                                 // ротонда, её крыша
       const [dx, dy] = at(0, -cy), dome = new THREE.Mesh(new THREE.SphereGeometry(6 * k, 32, 16), W1);
-      dome.position.set(dx, dy, 12.2); dome.scale.set(1, 1, 0.38); scene.add(dome);                         // купол
+      dome.position.set(dx, dy, 12.2); dome.scale.set(1, 1, 0.38); cur.add(dome);                         // купол
       [-1, 1].forEach(sx => lb(sx * (l / 2 - 10 * k), -w / 2 - 4 * k, 4.6, 12 * k, 7 * k, 0.25, W1));      // козырьки
       for (let i = 0; i < 6; i++) lb((i - 2.5) * 9 * k, -w / 2 - 8.5 * k, 4.2, 0.6, 0.6, 7.6, W1);         // пилоны
     }
@@ -201,7 +205,7 @@
         const hz = Math.max(z0, far.z) + R * 2.3, a = bot.clone().setZ(hz), b = far.clone().setZ(hz);
         rod(a, b, 3.4, M.gal, 16);                                                                  // от ствола над ближним тоннелем
         rod(b.clone().setZ(hz + 3.4), far, 3.4, M.gal, 16);                                         // спуск в дальний тоннель
-        const k = new THREE.Mesh(new THREE.SphereGeometry(3.4, 16, 12), M.gal); k.position.copy(b); scene.add(k);   // скруглённый поворот
+        const k = new THREE.Mesh(new THREE.SphereGeometry(3.4, 16, 12), M.gal); k.position.copy(b); cur.add(k);   // скруглённый поворот
       }
       rod(new THREE.Vector3(st.x, st.y, -6), new THREE.Vector3(st.x, st.y, 1.5), 6, M.kiosk, 20); // оголовок
       const [kl, kw] = v.size || [16, 10], ka = v.rot != null ? v.rot * Math.PI / 180 : Math.atan2(u.y, u.x);
@@ -216,7 +220,7 @@
       const at = (t, o) => { const p = curve.getPointAt(t), tg = curve.getTangentAt(t).setZ(0).normalize(); return new THREE.Vector3(p.x - tg.y * o, p.y + tg.x * o, p.z); };
       halls.forEach(([o, r]) => {
         const c = new THREE.CatmullRomCurve3(Array.from({ length: n }, (_, i) => at(t1 + (t2 - t1) * i / (n - 1), o)));
-        scene.add(new THREE.Mesh(new THREE.TubeGeometry(c, 48, r, 24, false), M.hall));
+        cur.add(new THREE.Mesh(new THREE.TubeGeometry(c, 48, r, 24, false), M.hall));
         [0, 1].forEach(e => { const p = c.getPointAt(e), tg = c.getTangentAt(e).multiplyScalar(e ? 1 : -1); rod(p, p.clone().add(tg.multiplyScalar(1.2)), r, M.wallEnd, 24); });
       });
       const len = curve.getLength() * (t2 - t1), k = Math.max(3, Math.floor(len / 22));
@@ -225,12 +229,13 @@
         [-1, 1].forEach(sg => { const a = at(t, 0), b = at(t, sg * gap); rod(a.clone().setZ(a.z - R * 0.35), b.clone().setZ(b.z - R * 0.35), R * 0.55, M.hall, 12); });
       }
     }
+    cur = G.stations;
     shield.stations.forEach(s => {
       const t1 = Math.max(0, tOfRing(s.from)), t2 = Math.min(1, tOfRing(s.to));
       if (t2 <= t1) return;
       if (s.pilot) {
         const sub = new THREE.CatmullRomCurve3(Array.from({ length: 10 }, (_, i) => curve.getPointAt(t1 + (t2 - t1) * i / 9)));
-        scene.add(new THREE.Mesh(new THREE.TubeGeometry(sub, 24, R * 1.6, 16, false), mat(accent, 0.45)));
+        cur.add(new THREE.Mesh(new THREE.TubeGeometry(sub, 24, R * 1.6, 16, false), mat(accent, 0.45)));
       } else pylonStation(t1, t2);
       const mid = curve.getPointAt((t1 + t2) / 2);
       let labelAt = [mid.x, mid.y];
@@ -258,6 +263,7 @@
       ugLabels.push({ html: s.name, pos: new THREE.Vector3(labelAt[0], labelAt[1], 22), cls: 'new' });
     });
 
+    cur = G.shafts;
     // Вентиляционные шахты: ствол на площадке, вентиляционные тоннели к своему и соседнему пути
     const nearestOn = (c, x, y, n = 400) => { let best = 1e18, bt = 0; for (let k = 0; k <= n; k++) { const q = c.getPointAt(k / n), dd = (q.x - x) ** 2 + (q.y - y) ** 2; if (dd < best) { best = dd; bt = k / n; } } return { t: bt, d: Math.sqrt(best), p: c.getPointAt(bt) }; };
     const twinCurves = DATA.shields.filter(o => o !== shield).map(o => new THREE.CatmullRomCurve3(o.path.map(ll => { const [x, y] = toLocal(ll); return new THREE.Vector3(x, y, -o.depth * VEX); }), false, 'centripetal'));
@@ -282,6 +288,7 @@
       const [x, y] = toLocal(e.lnglat); ugLabels.push({ html: `${e.name} <small>${e.line}</small>`, pos: new THREE.Vector3(x, y, 8), cls: 'ex' });
     });
 
+    cur = G.others;
     // Остальные щиты — тоже на сцене, чтобы видеть, например, «Любовь» и «Веру» вместе
     const others = [];
     DATA.shields.filter(o => o !== shield).forEach(o => {
@@ -289,16 +296,16 @@
       if (Math.hypot(opts[0].x, opts[0].y) > 30000) return; // далеко, не на этом экране
       const oc = new THREE.CatmullRomCurve3(opts, false, 'centripetal');
       const ocol = new THREE.Color(o.lineColor || '#8fa3b0'), oacc = new THREE.Color(o.color || '#e3a21a');
-      scene.add(new THREE.Mesh(new THREE.TubeGeometry(oc, 300, R, 12, false), mat(ocol, 0.3)));
+      cur.add(new THREE.Mesh(new THREE.TubeGeometry(oc, 300, R, 12, false), mat(ocol, 0.3)));
       const ot = Math.min(1, Math.max(0, tOfRing(o.ring, o)));
       if (ot > 0.002) {
         const dp = Array.from({ length: 60 }, (_, i) => oc.getPointAt(ot * i / 59));
-        scene.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(dp), 120, R * 1.03, 12, false), mat(ocol.clone().multiplyScalar(0.55), 1)));
+        cur.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(dp), 120, R * 1.03, 12, false), mat(ocol.clone().multiplyScalar(0.55), 1)));
       }
-      const op = oc.getPointAt(ot), og = new THREE.Mesh(new THREE.CylinderGeometry(R * 1.3, R * 1.3, 26, 20), new THREE.MeshLambertMaterial({ color: oacc, emissive: oacc, emissiveIntensity: 0.4 }));
-      og.position.copy(op); og.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), oc.getTangentAt(ot)); scene.add(og);
+      const op = oc.getPointAt(ot), og = makeTBM(oacc);
+      og.position.copy(op); og.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), oc.getTangentAt(ot)); cur.add(og);
       const ob = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, o.depth * VEX, 6), new THREE.MeshBasicMaterial({ color: oacc, transparent: true, opacity: 0.6 }));
-      ob.rotation.x = Math.PI / 2; ob.position.set(op.x, op.y, -o.depth * VEX / 2); scene.add(ob);
+      ob.rotation.x = Math.PI / 2; ob.position.set(op.x, op.y, -o.depth * VEX / 2); cur.add(ob);
       const txt = '«' + o.name + '» · <span class="mono">' + (o.ring >= o.total ? 'финиш' : (o.unit === 'm' ? fmt(o.ring) + ' м' : 'кольцо ' + fmt(o.ring))) + '</span>';
       const mk = label(txt, toLngLat(op.x, op.y), 'sh other');
       mk.getElement().style.setProperty('--oc', o.color || '#e3a21a');
@@ -359,6 +366,7 @@
 
     // Поверхность для режима «под землёй»: заполняется из тайлов карты при открытии
     ugGroup = new THREE.Group(); ugGroup.visible = false; scene.add(ugGroup);
+    applyLayers();
 
     const Y = new THREE.Vector3(0, 1, 0);
     layer = {
@@ -721,6 +729,33 @@
     navigator.clipboard.writeText(u.href).then(() => { $('b-link').textContent = 'Скопировано'; setTimeout(() => $('b-link').textContent = 'Ссылка на ракурс', 1500); });
   };
   let tipT = 0;
+  // --- Слои: что показывать на карте и в сцене (запоминается в браузере) ---
+  const LAYERS = [
+    ['buildings', 'Дома в 3D', l => /^building/.test(l.id)],
+    ['labels', 'Названия улиц и мест', l => l.type === 'symbol'],
+    ['roads', 'Улицы и дороги', l => l.type === 'line' && /road|highway|bridge|tunnel|transportation|aeroway|path|rail/.test(l.id)],
+    ['water', 'Вода', l => /water/.test(l.id)],
+    ['green', 'Парки и зелень', l => /park|landcover|landuse|wood|grass/.test(l.id)],
+    ['future', 'Будущий тоннель'], ['stations', 'Станции и вестибюли'], ['shafts', 'Вентшахты'],
+    ['others', 'Другие щиты'], ['existing', 'Действующие станции']
+  ];
+  let LV = {}; try { LV = JSON.parse(localStorage.getItem('ms-layers') || '{}'); } catch (e) {}
+  const on = k => LV[k] !== false;
+  function applyLayers() {
+    const st = map.getStyle();
+    if (st) for (const l of st.layers) for (const [k, , test] of LAYERS) if (test && test(l) && !(k === 'labels' && /poi|aerialway|ferry/.test(l.id))) map.setLayoutProperty(l.id, 'visibility', on(k) ? 'visible' : 'none');
+    ['future', 'stations', 'shafts', 'others'].forEach(k => { if (G[k]) G[k].visible = on(k); });
+    for (const k of ['stations', 'shafts', 'others', 'existing']) document.body.classList.toggle('hide-' + k, !on(k));
+    map.triggerRepaint(); if (UG.open) UG.dirty = true;
+  }
+  function setupLayers() {
+    const box = $('layers'); if (!box) return;
+    box.innerHTML = '<div class="lay-h">Слои</div>' + LAYERS.map(([k, t], i) => (i === 5 ? '<div class="lay-sep"></div>' : '') +
+      `<label><input type="checkbox" data-k="${k}"${on(k) ? ' checked' : ''}> ${t}</label>`).join('');
+    box.onchange = e => { const k = e.target.dataset.k; if (!k) return; LV[k] = e.target.checked; try { localStorage.setItem('ms-layers', JSON.stringify(LV)); } catch (x) {} applyLayers(); };
+    $('b-layers').onclick = e => { e.stopPropagation(); box.hidden = !box.hidden; };
+    document.addEventListener('click', e => { if (!box.hidden && !box.contains(e.target)) box.hidden = true; });
+  }
   function setClean(on) {
     document.body.classList.toggle('clean', on);
     if (on) { $('clean-tip').classList.add('show'); clearTimeout(tipT); tipT = setTimeout(() => $('clean-tip').classList.remove('show'), 2500); }
