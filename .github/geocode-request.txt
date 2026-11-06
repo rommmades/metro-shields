@@ -16,3 +16,8 @@ st-parfenovskaya | Парфёновская улица
 st-zastavskaya | Заставская улица
 st-staroobryadcheskaya | Старообрядческая улица
 st-tashkentskaya | Ташкентская улица
+st-blagodatnaya | Благодатная улица
+st-novoizm | Новоизмайловский проспект
+st-kubinskaya | Кубинская улица
+m-putilovskaya | Путиловская, станция метро
+m-kirzavod | Кировский завод, станция метро
