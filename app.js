@@ -160,26 +160,54 @@
       // наземный вестибюль: размер и поворот можно задать вручную (vestibule.size, vestibule.rot в градусах)
       const [vl, vw] = (vo && vo.size) || [42, 26], va = vo && vo.rot != null ? vo.rot * Math.PI / 180 : Math.atan2(d.y, d.x);
       if (vo) vo._auto = Math.round(((Math.atan2(d.y, d.x) * 180 / Math.PI) % 180 + 180) % 180);
-      box(vx, vy, 4.5, vl, vw, 9, Math.cos(va), Math.sin(va), M.vest);
+      if (vo && vo.model === 'rotunda') rotundaVestibule(vx, vy, va, vo.size);
+      else box(vx, vy, 4.5, vl, vw, 9, Math.cos(va), Math.sin(va), M.vest);
+    }
+    // Вестибюль-ротонда (как в диораме, по перспективе «Боровая 2»): подиум, корпус, торцевые стены,
+    // стеклянная ротонда с крышей и куполом, козырьки и пилоны. Только объём, в двух светлых тонах.
+    function rotundaVestibule(vx, vy, va, size) {
+      const [l, w] = size || [46, 30], k = l / 46, ca = Math.cos(va), sa = Math.sin(va);
+      const W1 = mat(0xebe7df, 1), W2 = mat(0xc9ccca, 1);
+      const at = (ox, oy) => [vx + ox * ca - oy * sa, vy + ox * sa + oy * ca];
+      const lb = (ox, oy, oz, bl, bw, bh, m) => { const [x, y] = at(ox, -oy); box(x, y, oz, bl, bw, bh, ca, sa, m); };
+      const lc = (ox, oy, oz, r, h, m, sc = 1) => { const [x, y] = at(ox, -oy), c = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 48), m);
+        c.rotation.x = Math.PI / 2; c.position.set(x, y, oz); c.scale.y = sc; scene.add(c); return c; };
+      lb(0, -2 * k, 0.4, l + 16 * k, w + 14 * k, 0.8, W1); lb(0, -2 * k, 1.0, l + 10 * k, w + 9 * k, 0.6, W1);   // подиум, ступень
+      lb(0, 0, 5.2, l - 6 * k, w - 2 * k, 8.4, W2);                                                         // лента остекления
+      [-1, 1].forEach(sx => lb(sx * (l / 2 - 3 * k), 0, 5.6, 6 * k, w, 9.2, W1));                           // торцы
+      lb(0, w / 2 - 1.5 * k, 5.6, l, 3 * k, 9.2, W1);                                                       // задняя стена
+      lb(0, 0, 9.9, l + 0.6, w + 0.6, 0.8, W1); lb(0, 0, 10.35, l - 1, w - 1, 0.2, W1);                    // парапет, кровля
+      const R_ = 13 * k, cy = -w / 2 + 4 * k;
+      lc(0, cy, 6.2, R_, 10.4, W2); lc(0, cy, 11.8, R_ + 1.4 * k, 1.0, W1);                                 // ротонда, её крыша
+      const [dx, dy] = at(0, -cy), dome = new THREE.Mesh(new THREE.SphereGeometry(6 * k, 32, 16), W1);
+      dome.position.set(dx, dy, 12.2); dome.scale.set(1, 1, 0.38); scene.add(dome);                         // купол
+      [-1, 1].forEach(sx => lb(sx * (l / 2 - 10 * k), -w / 2 - 4 * k, 4.6, 12 * k, 7 * k, 0.25, W1));      // козырьки
+      for (let i = 0; i < 6; i++) lb((i - 2.5) * 9 * k, -w / 2 - 8.5 * k, 4.2, 0.6, 0.6, 7.6, W1);         // пилоны
     }
     // Вентиляционная шахта: ствол из тюбингов → вентиляционная камера внизу → сбойка к перегонным тоннелям,
     // наверху оголовок и вентиляционный киоск с решётками
-    // Вентиляционная шахта глубокого заложения: ствол опускается вертикально рядом с тоннелем,
-    // внизу околоствольная камера и короткая сбойка под прямым углом в тоннель. Киоск на поверхности
-    // может стоять в стороне — тогда к оголовку ствола идёт неглубокий вентиляционный канал.
-    function shaftComplex(p, top, perp, v) {
-      const z0 = p.z, u = perp.clone().normalize(), off = R * 2.6;
-      const st = new THREE.Vector3(p.x + u.x * off, p.y + u.y * off, 0);      // ось ствола
-      rod(new THREE.Vector3(st.x, st.y, z0), new THREE.Vector3(st.x, st.y, -1), 4.5, M.shaft, 20);
-      box(st.x, st.y, z0, 12, 14, 12, u.x, u.y, M.cham);                     // околоствольная камера
-      box((st.x + p.x) / 2, (st.y + p.y) / 2, z0 - R * 0.3, off, 6, 7, u.x, u.y, M.gal);   // сбойка в тоннель, конец внутри трубы
+    // Вентиляционная шахта глубокого заложения (типовая схема метрополитенов): ствол из тюбингов опускается
+    // вертикально на строительной площадке сбоку от пары перегонных тоннелей, внизу околоствольный двор.
+    // От него к каждому тоннелю свой вентиляционный тоннель; тот, что к дальнему пути, проходит над ближним.
+    // Наверху оголовок ствола и вентиляционный киоск с решётками.
+    function shaftComplex(st, near, far, v) {
+      const z0 = near.z, u = new THREE.Vector3(near.x - st.x, near.y - st.y, 0);
+      if (u.length() < 0.01) u.set(1, 0, 0); u.normalize();
+      const bot = new THREE.Vector3(st.x, st.y, z0);
+      rod(bot.clone().setZ(z0 + 5), new THREE.Vector3(st.x, st.y, -1), 4.5, M.shaft, 20);        // ствол
+      box(st.x, st.y, z0 + 2, 18, 16, 16, u.x, u.y, M.cham);                                       // околоствольный двор
+      if (bot.distanceTo(near) > 4) rod(bot, near, 3.4, M.gal, 16);                                // вентиляционный тоннель к ближнему пути
+      if (far) {
+        const hz = Math.max(z0, far.z) + R * 2.3, a = bot.clone().setZ(hz), b = far.clone().setZ(hz);
+        rod(a, b, 3.4, M.gal, 16);                                                                  // от ствола над ближним тоннелем
+        rod(b.clone().setZ(hz + 3.4), far, 3.4, M.gal, 16);                                         // спуск в дальний тоннель
+        const k = new THREE.Mesh(new THREE.SphereGeometry(3.4, 16, 12), M.gal); k.position.copy(b); scene.add(k);   // скруглённый поворот
+      }
       rod(new THREE.Vector3(st.x, st.y, -6), new THREE.Vector3(st.x, st.y, 1.5), 6, M.kiosk, 20); // оголовок
-      const cl = Math.hypot(top.x - st.x, top.y - st.y);
-      if (cl > 8) box((top.x + st.x) / 2, (top.y + st.y) / 2, -4, cl, 6, 5, top.x - st.x, top.y - st.y, M.gal);   // канал к киоску
       const [kl, kw] = v.size || [16, 10], ka = v.rot != null ? v.rot * Math.PI / 180 : Math.atan2(u.y, u.x);
       v._auto = Math.round(((Math.atan2(u.y, u.x) * 180 / Math.PI) % 180 + 180) % 180);
-      box(top.x, top.y, 4, kl, kw, 5, Math.cos(ka), Math.sin(ka), M.kiosk);  // киоск
-      box(top.x, top.y, 6.6, kl - 2, kw - 2, 0.4, Math.cos(ka), Math.sin(ka), M.grille); // решётка
+      box(st.x, st.y, 4, kl, kw, 5, Math.cos(ka), Math.sin(ka), M.kiosk);   // киоск
+      box(st.x, st.y, 6.6, kl - 2, kw - 2, 0.4, Math.cos(ka), Math.sin(ka), M.grille); // решётка
     }
     // Пилонная станция глубокого заложения: средний зал и два боковых (платформенных), между пилонами проходы.
     // Торцы залов закрыты стенками, проходы начинаются и заканчиваются внутри залов — стыки чистые.
@@ -230,27 +258,21 @@
       ugLabels.push({ html: s.name, pos: new THREE.Vector3(labelAt[0], labelAt[1], 22), cls: 'new' });
     });
 
-    // Вентиляционные шахты: ствол от тоннеля до поверхности и киоск наверху
-    (shield.shafts || []).forEach((v, i) => {
-      let p, top, perp = null;
-      if (v.lnglat) {
-        // Шахта по адресу: ствол там, где площадка, и горизонтальная сбойка к ближайшей точке тоннеля
-        const [sx, sy] = toLocal(v.lnglat);
-        let best = 1e9, bt = 0;
-        for (let k = 0; k <= 400; k++) { const q = curve.getPointAt(k / 400), dd = (q.x - sx) ** 2 + (q.y - sy) ** 2; if (dd < best) { best = dd; bt = k / 400; } }
-        if (Math.sqrt(best) > 400) return; // площадка далеко от этого участка
-        p = curve.getPointAt(bt); top = new THREE.Vector3(sx, sy, 0);
-        const tg = curve.getTangentAt(bt).setZ(0).normalize(), nrm = new THREE.Vector3(-tg.y, tg.x, 0);
-        perp = nrm.multiplyScalar((sx - p.x) * nrm.x + (sy - p.y) * nrm.y >= 0 ? 1 : -1);
-      } else {
-        const t = Math.min(1, Math.max(0, tOfRing(v.ring)));
-        p = curve.getPointAt(t); const tan = curve.getTangentAt(t).setZ(0).normalize();
-        const o = new THREE.Vector3(-tan.y, tan.x, 0).multiplyScalar(R * 2.6);
-        top = new THREE.Vector3(p.x + o.x, p.y + o.y, 0);
+    // Вентиляционные шахты: ствол на площадке, вентиляционные тоннели к своему и соседнему пути
+    const nearestOn = (c, x, y, n = 400) => { let best = 1e18, bt = 0; for (let k = 0; k <= n; k++) { const q = c.getPointAt(k / n), dd = (q.x - x) ** 2 + (q.y - y) ** 2; if (dd < best) { best = dd; bt = k / n; } } return { t: bt, d: Math.sqrt(best), p: c.getPointAt(bt) }; };
+    const twinCurves = DATA.shields.filter(o => o !== shield).map(o => new THREE.CatmullRomCurve3(o.path.map(ll => { const [x, y] = toLocal(ll); return new THREE.Vector3(x, y, -o.depth * VEX); }), false, 'centripetal'));
+    (shield.shafts || []).forEach(v => {
+      let top;
+      if (v.lnglat) { const [sx, sy] = toLocal(v.lnglat); top = new THREE.Vector3(sx, sy, 0); }
+      else {
+        const t = Math.min(1, Math.max(0, tOfRing(v.ring))), p = curve.getPointAt(t), tan = curve.getTangentAt(t).setZ(0).normalize();
+        top = new THREE.Vector3(p.x - tan.y * R * 4, p.y + tan.x * R * 4, 0);
       }
-      if (!perp) perp = new THREE.Vector3(top.x - p.x, top.y - p.y, 0);
-      if (perp.length() < 0.01) perp.set(1, 0, 0);
-      shaftComplex(p, top, perp, v);
+      const n = nearestOn(curve, top.x, top.y);
+      if (n.d > 400) return;                                  // площадка далеко от этого участка
+      let far = null;
+      for (const c of twinCurves) { if (Math.hypot(c.points[0].x, c.points[0].y) > 30000) continue; const m = nearestOn(c, top.x, top.y, 300); if (m.d < n.d + 80 && (!far || m.d < far.d)) far = m; }
+      if (far && far.d < n.d) shaftComplex(top, far.p, n.p, v); else shaftComplex(top, n.p, far && far.p, v);   // прямой тоннель — к ближнему пути
       const name = v.name || 'Вентшахта';
       markers.push(label(name + (v.note ? ' <small>' + v.note + '</small>' : ''), toLngLat(top.x, top.y), 'vs', { type: 'shaft', v }));
       ugLabels.push({ html: name, pos: new THREE.Vector3(top.x, top.y, 12), cls: 'vs' });
