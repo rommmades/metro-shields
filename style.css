@@ -8,7 +8,7 @@ html, body { margin: 0; height: 100%; background: #e9edef; color: var(--ink); fo
 .card { position: fixed; z-index: 2; background: var(--card); backdrop-filter: blur(8px); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 4px 18px rgba(20, 30, 35, .08); }
 .panel { top: 12px; left: 12px; width: min(360px, calc(100% - 24px)); padding: 14px 16px; }
 .eyebrow { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); display: flex; align-items: center; gap: 6px; }
-.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); flex: none; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--lc, var(--ok)); flex: none; }
 .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 h1 { font: 700 22px/1.2 "Unbounded", sans-serif; margin: 6px 0 8px; }
 select { font: inherit; font-size: 13px; padding: 4px 6px; border-radius: 8px; border: 1px solid var(--line); background: #fff; }
@@ -33,6 +33,18 @@ button:hover { border-color: var(--muted); }
 .lbl.ex { color: var(--muted); }
 .lbl.sh { background: var(--accent); border-color: var(--accent); font-weight: 600; }
 .lbl small { opacity: .7; }
+.lbl.vs { font-size: 10.5px; padding: 1px 5px; color: var(--muted); background: rgba(255,255,255,.85); }
+.lbl.new { border-color: var(--lc, var(--ink)); }
+button.primary { background: var(--lc, var(--ink)); border-color: var(--lc, var(--ink)); color: #fff; }
+#under { position: fixed; inset: 0; z-index: 1; background: #2a2723; }
+#under .lbl.ex { background: rgba(255,255,255,.85); }
+#under[hidden] { display: none; }
+#under canvas { display: block; }
+#under-labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+#under-labels .lbl { position: absolute; left: 0; top: 0; }
+.back { position: absolute; top: 12px; right: 12px; z-index: 3; }
+.under-hint { position: absolute; right: 12px; top: 48px; background: rgba(255,255,255,.8); padding: 2px 8px; border-radius: 6px; }
+body.ug .maplibregl-ctrl-top-right { display: none; }
 .maplibregl-ctrl-attrib { display: none; }
 @media (max-width: 640px) {
   .panel { padding: 10px 12px; }
@@ -40,5 +52,8 @@ button:hover { border-color: var(--muted); }
   .big .mono { font-size: 20px; }
   #p-note, .dock-head .small { display: none; }
   .maplibregl-ctrl-top-right { display: none; }
+  .under-hint { display: none; }
+  .back { display: none; }
+  body.ug .attrib { display: none; }
   .attrib { bottom: auto; top: auto; right: 12px; left: 12px; bottom: 132px; text-align: right; background: none; }
 }

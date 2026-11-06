@@ -8,19 +8,21 @@
     : 'https://tiles.openfreemap.org/styles/liberty';
   const VEX = 1.6;       // вертикальное преувеличение глубины, чтобы тоннель было видно
   const R = 7;           // радиус тоннеля в сцене, м (реальный ≈2,8 м, увеличен для читаемости)
+  const ESC_ANGLE = 30;  // наклон эскалаторного хода, градусы
   const $ = id => document.getElementById(id);
   const fmt = n => Math.round(n).toLocaleString('ru-RU');
 
   const map = new maplibregl.Map({
     container: 'map', style: STYLE, center: [30.335, 59.903], zoom: 13.6, pitch: 55, bearing: -20,
-    maxPitch: 75, antialias: true, attributionControl: false
+    maxPitch: 80, antialias: true, attributionControl: false
   });
   map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');
 
   let DATA, shield, origin, S, layer, markers = [];
+  let scene, ugGroup, ugLabels = [];
 
   Promise.all([fetch('data/shields.json').then(r => r.json()), new Promise(res => map.on('load', res))])
-    .then(([d]) => { DATA = d; tuneStyle(); setupPicker(); pick(qs.get('shield') || DATA.shields[0].id); })
+    .then(([d]) => { DATA = d; tuneStyle(); setupPicker(); pick(qs.get('shield') || DATA.shields[0].id); if (qs.has('under')) openUnder(); })
     .catch(e => { console.error(e); $('p-next').textContent = 'Не удалось загрузить данные.'; });
 
   // --- Стиль карты: убираем лишние значки, делаем дома спокойными и полупрозрачными ---
@@ -53,6 +55,7 @@
     origin = maplibregl.MercatorCoordinate.fromLngLat(shield.path[0], 0);
     S = origin.meterInMercatorCoordinateUnits();
     document.documentElement.style.setProperty('--accent', shield.color || '#e3a21a');
+    document.documentElement.style.setProperty('--lc', shield.lineColor || '#39474f');
     $('p-line').textContent = shield.line;
     $('p-name').textContent = 'Щит «' + shield.name + '»';
     const M = shield.unit === 'm';
@@ -63,23 +66,28 @@
     buildScene();
     setRing(shield.ring);
     overview(false);
+    if (UG.open) UG.rebuildSurface();
   }
 
-  // --- 3D-слой под картой ---
+  const mat = (color, opacity) => new THREE.MeshLambertMaterial({ color, transparent: opacity < 1, opacity, side: THREE.DoubleSide, depthWrite: opacity >= 1 });
+
+  // --- 3D-сцена: тоннель, станции с эскалаторами, вентшахты, щит ---
   function buildScene() {
     if (map.getLayer('tunnel')) map.removeLayer('tunnel');
     markers.forEach(m => m.remove()); markers = [];
+    ugLabels = [];
     const D = shield.depth * VEX;
     const pts = shield.path.map(ll => { const [x, y] = toLocal(ll); return new THREE.Vector3(x, y, -D); });
     const curve = new THREE.CatmullRomCurve3(pts, false, 'centripetal');
-    const scene = new THREE.Scene();
+    scene = new THREE.Scene();
     scene.add(new THREE.AmbientLight(0xffffff, 0.65));
     const sun = new THREE.DirectionalLight(0xffffff, 0.55); sun.position.set(-0.5, -1, 2); scene.add(sun);
-    const mat = (color, opacity) => new THREE.MeshLambertMaterial({ color, transparent: opacity < 1, opacity, side: THREE.DoubleSide, depthWrite: opacity >= 1 });
     const accent = new THREE.Color(shield.color || '#e3a21a');
+    const lineCol = new THREE.Color(shield.lineColor || '#8fa3b0');
+    const lineDark = lineCol.clone().multiplyScalar(0.55);
 
-    // Весь будущий тоннель — полупрозрачная труба
-    scene.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 500, R, 16, false), mat(0x8fa3b0, 0.35)));
+    // Весь будущий тоннель — полупрозрачная труба в цвете линии
+    scene.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 500, R, 16, false), mat(lineCol, 0.38)));
     // Срез грунта: вертикальная полупрозрачная «стенка» от поверхности до тоннеля
     const wall = [], N = 240;
     for (let i = 0; i < N; i++) {
@@ -87,23 +95,65 @@
       wall.push(a.x, a.y, 0, a.x, a.y, z0, b.x, b.y, 0, a.x, a.y, z0, b.x, b.y, z0, b.x, b.y, 0);
     }
     const wg = new THREE.BufferGeometry(); wg.setAttribute('position', new THREE.Float32BufferAttribute(wall, 3));
-    scene.add(new THREE.Mesh(wg, new THREE.MeshBasicMaterial({ color: 0x9fb1bd, transparent: true, opacity: 0.16, side: THREE.DoubleSide, depthWrite: false })));
+    scene.add(new THREE.Mesh(wg, new THREE.MeshBasicMaterial({ color: 0x9fb1bd, transparent: true, opacity: 0.1, side: THREE.DoubleSide, depthWrite: false })));
 
-    // Станции: объём на глубине + ствол к поверхности + подпись
-    const ringT = r => tOfRing(r);
+    // Станционные комплексы: зал на глубине, наклонный эскалаторный ход, наземный вестибюль
+    const Z = new THREE.Vector3(0, 0, 1);
     shield.stations.forEach(s => {
-      const t1 = Math.max(0, ringT(s.from)), t2 = Math.min(1, ringT(s.to));
+      const t1 = Math.max(0, tOfRing(s.from)), t2 = Math.min(1, tOfRing(s.to));
+      if (t2 <= t1) return;
       const sub = new THREE.CatmullRomCurve3(Array.from({ length: 10 }, (_, i) => curve.getPointAt(t1 + (t2 - t1) * i / 9)));
-      scene.add(new THREE.Mesh(new THREE.TubeGeometry(sub, 24, R * 2.2, 6, false), s.pilot ? mat(accent, 0.4) : mat(0xffffff, 0.92)));
+      scene.add(new THREE.Mesh(new THREE.TubeGeometry(sub, 24, R * 2.2, 8, false), s.pilot ? mat(accent, 0.45) : mat(0xffffff, 0.92)));
       const mid = curve.getPointAt((t1 + t2) / 2);
-      const shaft = new THREE.Mesh(new THREE.CylinderGeometry(4, 4, D, 10), mat(0xffffff, 0.55));
-      shaft.rotation.x = Math.PI / 2; shaft.position.set(mid.x, mid.y, -D / 2); scene.add(shaft);
-      markers.push(label(s.name, toLngLat(mid.x, mid.y), 'new'));
+      let labelAt = [mid.x, mid.y];
+      if (s.escalator) {
+        const atEnd = s.escalator === 'to';
+        const tEnd = atEnd ? t2 : t1;
+        const base = curve.getPointAt(tEnd);
+        const dir = curve.getTangentAt(tEnd).setZ(0).normalize().multiplyScalar(atEnd ? 1 : -1);
+        const run = D / Math.tan(ESC_ANGLE * Math.PI / 180);
+        const top = new THREE.Vector3(base.x + dir.x * run, base.y + dir.y * run, -6);
+        const len = base.distanceTo(top);
+        const esc = new THREE.Mesh(new THREE.CylinderGeometry(4.5, 4.5, len, 12), mat(0xf4efe6, 0.9));
+        esc.position.copy(base).add(top).multiplyScalar(0.5);
+        esc.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), top.clone().sub(base).normalize());
+        scene.add(esc);
+        // Вестибюль: прямоугольный павильон на поверхности, повёрнут по оси эскалатора
+        const vest = new THREE.Mesh(new THREE.BoxGeometry(42, 26, 9), mat(lineCol, 0.95));
+        vest.position.set(top.x + dir.x * 14, top.y + dir.y * 14, 4.5);
+        vest.rotation.z = Math.atan2(dir.y, dir.x);
+        scene.add(vest);
+        labelAt = [vest.position.x, vest.position.y];
+      }
+      const ll = toLngLat(labelAt[0], labelAt[1]);
+      markers.push(label(s.name + (s.pilot ? ' <small>пилотный тоннель</small>' : ''), ll, 'new'));
+      ugLabels.push({ html: s.name, pos: new THREE.Vector3(labelAt[0], labelAt[1], 22), cls: 'new' });
     });
-    (shield.existing || DATA.existing || []).forEach(e => markers.push(label(`${e.name} <small>${e.line}</small>`, e.lnglat, 'ex')));
+
+    // Вентиляционные шахты: ствол от тоннеля до поверхности и киоск наверху
+    (shield.shafts || []).forEach((v, i) => {
+      const t = Math.min(1, Math.max(0, tOfRing(v.ring)));
+      const p = curve.getPointAt(t), tan = curve.getTangentAt(t).setZ(0).normalize();
+      const off = new THREE.Vector3(-tan.y, tan.x, 0).multiplyScalar(R * 3.2); // сбоку от тоннеля
+      const top = new THREE.Vector3(p.x + off.x, p.y + off.y, 0);
+      const shaft = new THREE.Mesh(new THREE.CylinderGeometry(4, 4, D, 12), mat(0xb9c3c8, 0.85));
+      shaft.rotation.x = Math.PI / 2; shaft.position.set(top.x, top.y, -D / 2); scene.add(shaft);
+      const link = new THREE.Mesh(new THREE.CylinderGeometry(3, 3, off.length(), 8), mat(0xb9c3c8, 0.85));
+      link.position.set(p.x + off.x / 2, p.y + off.y / 2, -D);
+      link.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), off.clone().normalize()); scene.add(link);
+      const kiosk = new THREE.Mesh(new THREE.BoxGeometry(12, 12, 7), mat(0x7d878c, 1));
+      kiosk.position.set(top.x, top.y, 3.5); scene.add(kiosk);
+      const name = v.name || 'Вентшахта';
+      markers.push(label(name, toLngLat(top.x, top.y), 'vs'));
+      ugLabels.push({ html: name, pos: new THREE.Vector3(top.x, top.y, 12), cls: 'vs' });
+    });
+    (shield.existing || DATA.existing || []).forEach(e => {
+      markers.push(label(`${e.name} <small>${e.line}</small>`, e.lnglat, 'ex'));
+      const [x, y] = toLocal(e.lnglat); ugLabels.push({ html: `${e.name} <small>${e.line}</small>`, pos: new THREE.Vector3(x, y, 8), cls: 'ex' });
+    });
 
     // Пройденная часть и щит
-    const doneMat = mat(0x39474f, 1);
+    const doneMat = mat(lineDark, 1);
     let doneMesh = null;
     const sh = new THREE.Group();
     const body = new THREE.Mesh(new THREE.CylinderGeometry(R * 1.3, R * 1.3, 26, 24), new THREE.MeshLambertMaterial({ color: accent, emissive: accent, emissiveIntensity: 0.4 }));
@@ -114,11 +164,15 @@
     beacon.rotation.x = Math.PI / 2; scene.add(beacon);
     const shLabel = label('', shield.path[0], 'sh');
     markers.push(shLabel);
+    const shUg = { html: '', pos: new THREE.Vector3(), cls: 'sh' }; ugLabels.push(shUg);
+
+    // Поверхность для режима «под землёй»: заполняется из тайлов карты при открытии
+    ugGroup = new THREE.Group(); ugGroup.visible = false; scene.add(ugGroup);
 
     const Y = new THREE.Vector3(0, 1, 0);
     layer = {
       id: 'tunnel', type: 'custom', renderingMode: '3d',
-      curve, D,
+      curve, D, shUg,
       setT(t) {
         const p = curve.getPointAt(t), tan = curve.getTangentAt(t);
         sh.position.copy(p); sh.quaternion.setFromUnitVectors(Y, tan);
@@ -131,7 +185,8 @@
         }
         const ll = toLngLat(p.x, p.y);
         shLabel.setLngLat(ll);
-        this.shieldLL = ll;
+        shUg.pos.set(p.x, p.y, 30);
+        this.shieldLL = ll; this.shieldP = p.clone();
         map.triggerRepaint();
       },
       onAdd(m, gl) {
@@ -140,8 +195,10 @@
         this.renderer.autoClear = false;
       },
       render(gl, matrix) {
+        if (UG.open) return;
         const l = new THREE.Matrix4().makeTranslation(origin.x, origin.y, origin.z).scale(new THREE.Vector3(S, S, S));
         this.camera.projectionMatrix = new THREE.Matrix4().fromArray(matrix).multiply(l);
+        ugGroup.visible = false;
         this.renderer.resetState();
         this.renderer.render(scene, this.camera);
       },
@@ -149,16 +206,22 @@
     };
     map.addLayer(layer, map.getLayer('building-3d') ? 'building-3d' : undefined);
 
-    // Трасса на поверхности: пунктир будущего хода и сплошная линия пройденного
+    // Трасса на поверхности: пунктир будущего хода, сплошная линия пройденного, соседние участки линии
     const line = Array.from({ length: 200 }, (_, i) => { const p = curve.getPointAt(i / 199); const ll = toLngLat(p.x, p.y); return [ll.lng, ll.lat]; });
-    const fc = { type: 'FeatureCollection', features: [{ type: 'Feature', properties: { k: 'all' }, geometry: { type: 'LineString', coordinates: line } }] };
-    if (map.getSource('route')) map.getSource('route').setData(fc);
-    else {
-      map.addSource('route', { type: 'geojson', data: fc });
-      map.addLayer({ id: 'route-all', type: 'line', source: 'route', filter: ['==', 'k', 'all'], paint: { 'line-color': '#39474f', 'line-width': 2, 'line-dasharray': [2, 2], 'line-opacity': 0.6 } }, 'tunnel');
-      map.addLayer({ id: 'route-done', type: 'line', source: 'route', filter: ['==', 'k', 'done'], paint: { 'line-color': '#39474f', 'line-width': 4 } }, 'tunnel');
-    }
     layer.line = line;
+    const ctx = { type: 'FeatureCollection', features: (shield.context || []).map(c => ({ type: 'Feature', properties: { k: c.kind }, geometry: { type: 'LineString', coordinates: c.pts } })) };
+    const lc = shield.lineColor || '#39474f';
+    if (!map.getSource('route')) {
+      map.addSource('route', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      map.addSource('context', { type: 'geojson', data: ctx });
+      map.addLayer({ id: 'ctx-con', type: 'line', source: 'context', filter: ['==', 'k', 'construction'], paint: { 'line-color': lc, 'line-width': 3, 'line-opacity': 0.55, 'line-dasharray': [3, 1.5] } }, 'tunnel');
+      map.addLayer({ id: 'ctx-pro', type: 'line', source: 'context', filter: ['==', 'k', 'proposed'], paint: { 'line-color': lc, 'line-width': 2, 'line-opacity': 0.4, 'line-dasharray': [1, 2] } }, 'tunnel');
+      map.addLayer({ id: 'route-all', type: 'line', source: 'route', filter: ['==', 'k', 'all'], paint: { 'line-color': lc, 'line-width': 3, 'line-dasharray': [2, 2], 'line-opacity': 0.75 } }, 'tunnel');
+      map.addLayer({ id: 'route-done', type: 'line', source: 'route', filter: ['==', 'k', 'done'], paint: { 'line-color': lc, 'line-width': 5 } }, 'tunnel');
+    } else {
+      map.getSource('context').setData(ctx);
+      ['ctx-con', 'ctx-pro', 'route-all', 'route-done'].forEach(id => map.setPaintProperty(id, 'line-color', lc));
+    }
   }
 
   function label(html, ll, cls) {
@@ -176,25 +239,26 @@
     r = +r;
     const t = Math.min(1, Math.max(0, tOfRing(r)));
     layer.setT(t);
-    layer.shLabel.getElement().innerHTML = '«' + shield.name + '» · <span class="mono">' + (r >= shield.total ? 'финиш' : unitTxt(r)) + '</span>';
+    const html = '«' + shield.name + '» · <span class="mono">' + (r >= shield.total ? 'финиш' : unitTxt(r)) + '</span>';
+    layer.shLabel.getElement().innerHTML = html; layer.shUg.html = html;
     const n = Math.max(2, Math.round(t * 199));
-    const fc = { type: 'FeatureCollection', features: [
+    map.getSource('route').setData({ type: 'FeatureCollection', features: [
       { type: 'Feature', properties: { k: 'all' }, geometry: { type: 'LineString', coordinates: layer.line } },
-      { type: 'Feature', properties: { k: 'done' }, geometry: { type: 'LineString', coordinates: layer.line.slice(0, n) } }] };
-    map.getSource('route').setData(fc);
+      { type: 'Feature', properties: { k: 'done' }, geometry: { type: 'LineString', coordinates: layer.line.slice(0, n) } }] });
     $('p-ring').textContent = fmt(r);
     $('p-bar').style.width = Math.min(100, r / shield.total * 100) + '%';
     $('ring-out').textContent = unitTxt(r);
     const st = shield.stations.filter(s => s.to > 0);
     const inside = st.find(s => r >= s.from && r <= s.to);
     const next = st.find(s => s.from > r);
+    const u = shield.unit === 'm' ? ' м' : ' колец';
     let txt;
     if (r >= shield.total) txt = 'Проходка участка завершена';
     else if (inside) txt = 'Щит проходит «' + inside.name + '»';
-    else if (next && next.from < shield.total) txt = 'До «' + next.name + '» ' + fmt(next.from - r) + (shield.unit === 'm' ? ' м' : ' колец');
-    else if (r < shield.total) txt = 'До финиша ' + fmt(shield.total - r) + (shield.unit === 'm' ? ' м' : ' колец');
-    else txt = 'Проходка участка завершена';
+    else if (next && next.from < shield.total) txt = 'До «' + next.name + '» ' + fmt(next.from - r) + u;
+    else txt = 'До финиша ' + fmt(shield.total - r) + u;
     $('p-next').textContent = txt;
+    UG.dirty = true;
   }
 
   function unitTxt(r) { return shield.unit === 'm' ? fmt(r) + ' м' : 'кольцо ' + fmt(r); }
@@ -209,8 +273,129 @@
   }
   function follow() { map.easeTo({ center: layer.shieldLL, zoom: 15.8, pitch: 65, duration: 1200 }); }
 
+  // --- Режим «под землёй»: своя камера, которую можно опустить ниже поверхности ---
+  const UG = {
+    open: false, dirty: true, renderer: null, camera: null, controls: null, raf: 0,
+    init() {
+      const box = $('under');
+      this.renderer = new THREE.WebGLRenderer({ antialias: true });
+      this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+      this.renderer.setClearColor(0x2a2723, 1);
+      box.insertBefore(this.renderer.domElement, box.firstChild);
+      this.camera = new THREE.PerspectiveCamera(45, 1, 2, 30000);
+      this.camera.up.set(0, 0, 1);
+      this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
+      this.controls.enableDamping = true; this.controls.maxPolarAngle = Math.PI; this.controls.minDistance = 30; this.controls.maxDistance = 8000;
+      this.controls.addEventListener('change', () => this.dirty = true);
+      addEventListener('resize', () => this.resize());
+    },
+    resize() {
+      const w = innerWidth, h = innerHeight;
+      this.renderer.setSize(w, h); this.camera.aspect = w / h; this.camera.updateProjectionMatrix(); this.dirty = true;
+    },
+    // Поверхность: полупрозрачная «земля», дома и дороги из уже загруженных тайлов карты
+    rebuildSurface() {
+      while (ugGroup.children.length) { const c = ugGroup.children.pop(); c.geometry && c.geometry.dispose(); }
+      const c = layer.curve, D = layer.D;
+      const bb = new THREE.Box3().setFromPoints(c.getSpacedPoints(100)); bb.expandByScalar(700);
+      const size = bb.getSize(new THREE.Vector3()), ctr = bb.getCenter(new THREE.Vector3());
+      const ground = new THREE.Mesh(new THREE.PlaneGeometry(size.x, size.y), new THREE.MeshBasicMaterial({ color: 0xf1ede4, transparent: true, opacity: 0.3, side: THREE.DoubleSide, depthWrite: false }));
+      ground.position.set(ctr.x, ctr.y, 0); ugGroup.add(ground);
+      // слой грунта снизу, чтобы было ощущение «под землёй»
+      const grid = new THREE.GridHelper(Math.max(size.x, size.y), 40, 0x6b6153, 0x4a443b);
+      grid.rotation.x = Math.PI / 2; grid.position.set(ctr.x, ctr.y, -D - 30); grid.material.transparent = true; grid.material.opacity = 0.35; ugGroup.add(grid);
+      const near = (x, y) => x > bb.min.x && x < bb.max.x && y > bb.min.y && y < bb.max.y;
+      let feats = [];
+      try { feats = map.querySourceFeatures('openmaptiles', { sourceLayer: 'building' }); } catch (e) { feats = []; }
+      const geos = [], seen = new Set();
+      for (const f of feats) {
+        const g = f.geometry, h = +(f.properties.render_height || f.properties.height || 12);
+        const polys = g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : [];
+        for (const poly of polys) {
+          const ring = poly[0]; if (!ring || ring.length < 4) continue;
+          const key = ring[0].join() + ring.length; if (seen.has(key)) continue; seen.add(key);
+          const loc = ring.map(toLocal); if (!near(loc[0][0], loc[0][1])) continue;
+          const shp = new THREE.Shape(loc.map(p => new THREE.Vector2(p[0], p[1])));
+          geos.push(new THREE.ExtrudeGeometry(shp, { depth: Math.max(3, h), bevelEnabled: false }));
+          if (geos.length > 6000) break;
+        }
+      }
+      if (geos.length) {
+        const merged = mergeGeos(geos);
+        ugGroup.add(new THREE.Mesh(merged, new THREE.MeshLambertMaterial({ color: 0xd9d3c7, transparent: true, opacity: 0.45, depthWrite: false, side: THREE.DoubleSide })));
+      }
+      let roads = [];
+      try { roads = map.querySourceFeatures('openmaptiles', { sourceLayer: 'transportation' }); } catch (e) { roads = []; }
+      const seg = [];
+      for (const f of roads) {
+        const g = f.geometry; const lines = g.type === 'LineString' ? [g.coordinates] : g.type === 'MultiLineString' ? g.coordinates : [];
+        for (const ln of lines) {
+          const loc = ln.map(toLocal);
+          for (let i = 0; i < loc.length - 1; i++) if (near(loc[i][0], loc[i][1])) seg.push(loc[i][0], loc[i][1], 0.5, loc[i + 1][0], loc[i + 1][1], 0.5);
+        }
+      }
+      if (seg.length) {
+        const lg = new THREE.BufferGeometry(); lg.setAttribute('position', new THREE.Float32BufferAttribute(seg, 3));
+        ugGroup.add(new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ color: 0x9aa4a9, transparent: true, opacity: 0.6 })));
+      }
+      // трасса на поверхности
+      const rl = new THREE.BufferGeometry().setFromPoints(c.getSpacedPoints(200).map(p => new THREE.Vector3(p.x, p.y, 0.8)));
+      ugGroup.add(new THREE.Line(rl, new THREE.LineDashedMaterial({ color: new THREE.Color(shield.lineColor || '#39474f'), dashSize: 12, gapSize: 8 })));
+      ugGroup.children[ugGroup.children.length - 1].computeLineDistances();
+      // подписи
+      const lb = $('under-labels'); lb.innerHTML = '';
+      this.labels = ugLabels.map(L => { const d = document.createElement('div'); d.className = 'lbl ' + L.cls; lb.appendChild(d); return { L, d }; });
+      this.dirty = true;
+    },
+    look() {
+      // Камера ниже поверхности, сбоку от щита, смотрит на щит снизу вверх
+      const p = layer.shieldP || layer.curve.getPointAt(0.5);
+      const tan = layer.curve.getTangentAt(0.5).setZ(0).normalize();
+      const side = new THREE.Vector3(-tan.y, tan.x, 0);
+      this.camera.position.set(p.x + side.x * 520 - tan.x * 260, p.y + side.y * 520 - tan.y * 260, p.z - 170);
+      this.controls.target.set(p.x, p.y, p.z * 0.6);
+      this.controls.update(); this.dirty = true;
+    },
+    loop() {
+      this.raf = requestAnimationFrame(() => this.loop());
+      this.controls.update();
+      if (!this.dirty) return;
+      this.dirty = false;
+      ugGroup.visible = true;
+      this.renderer.render(scene, this.camera);
+      const w = innerWidth, h = innerHeight, v = new THREE.Vector3();
+      for (const { L, d } of this.labels) {
+        v.copy(L.pos).project(this.camera);
+        const show = v.z < 1 && Math.abs(v.x) < 1.1 && Math.abs(v.y) < 1.1;
+        d.style.display = show ? '' : 'none';
+        if (show) { d.innerHTML = L.html; d.style.transform = `translate(${(v.x + 1) / 2 * w}px, ${(1 - v.y) / 2 * h}px) translate(-50%, -100%)`; }
+      }
+    }
+  };
+  function openUnder() {
+    if (!UG.renderer) UG.init();
+    UG.open = true; $('under').hidden = false; document.body.classList.add('ug');
+    $('b-under').textContent = 'На карту';
+    UG.resize(); UG.rebuildSurface(); UG.look(); UG.loop();
+  }
+  function closeUnder() {
+    UG.open = false; $('under').hidden = true; document.body.classList.remove('ug');
+    $('b-under').textContent = 'Под землю';
+    cancelAnimationFrame(UG.raf); map.triggerRepaint();
+  }
+
+  // Минимальное слияние геометрий (без BufferGeometryUtils)
+  function mergeGeos(geos) {
+    let total = 0; const list = geos.map(g => (g.index ? g.toNonIndexed() : g)); list.forEach(g => total += g.attributes.position.count);
+    const pos = new Float32Array(total * 3); let o = 0;
+    list.forEach(g => { pos.set(g.attributes.position.array, o); o += g.attributes.position.array.length; g.dispose(); });
+    const out = new THREE.BufferGeometry(); out.setAttribute('position', new THREE.BufferAttribute(pos, 3)); out.computeVertexNormals(); return out;
+  }
+
   $('ring').addEventListener('input', e => setRing(e.target.value));
-  $('b-now').onclick = () => { $('ring').value = shield.ring; setRing(shield.ring); follow(); };
-  $('b-follow').onclick = follow;
-  $('b-all').onclick = () => overview(true);
+  $('b-now').onclick = () => { $('ring').value = shield.ring; setRing(shield.ring); UG.open ? UG.look() : follow(); };
+  $('b-follow').onclick = () => UG.open ? UG.look() : follow();
+  $('b-all').onclick = () => { if (UG.open) closeUnder(); overview(true); };
+  $('b-under').onclick = () => UG.open ? closeUnder() : openUnder();
+  $('b-back').onclick = closeUnder;
 })();

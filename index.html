@@ -32,13 +32,21 @@
     <button id="b-now">Сейчас</button>
     <button id="b-follow">К щиту</button>
     <button id="b-all">Весь участок</button>
+    <button id="b-under" class="primary">Под землю</button>
   </div>
 </section>
+
+<div id="under" hidden>
+  <div id="under-labels"></div>
+  <button id="b-back" class="back">← На карту</button>
+  <div class="under-hint muted small">Вращайте сцену, камеру можно опустить ниже поверхности</div>
+</div>
 
 <div class="attrib muted small">Данные: <a href="https://t.me/podzemnik_spb" target="_blank" rel="noopener">«Подземник»</a> · карта © <a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a>, <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a></div>
 
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <script src="https://unpkg.com/three@0.128.0/build/three.min.js"></script>
+<script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
