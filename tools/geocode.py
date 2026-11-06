@@ -6,11 +6,11 @@ out = {}
 for line in open('.github/geocode-request.txt', encoding='utf-8'):
     if '|' not in line: continue
     key, q = [s.strip() for s in line.split('|', 1)]
-    url = 'https://nominatim.openstreetmap.org/search?' + urllib.parse.urlencode({'q': q + ', Санкт-Петербург', 'format': 'jsonv2', 'limit': 1, 'countrycodes': 'ru'})
+    url = 'https://nominatim.openstreetmap.org/search?' + urllib.parse.urlencode({'q': q + ', Санкт-Петербург', 'format': 'jsonv2', 'limit': 1, 'countrycodes': 'ru', 'polygon_geojson': 1})
     req = urllib.request.Request(url, headers={'User-Agent': 'metro-shields/1.0 (github.com/rommmades/metro-shields)'})
     try:
         r = json.load(urllib.request.urlopen(req, timeout=30))
-        out[key] = {'q': q, 'lnglat': [round(float(r[0]['lon']), 6), round(float(r[0]['lat']), 6)], 'name': r[0].get('display_name', '')} if r else {'q': q, 'lnglat': None}
+        out[key] = {'q': q, 'lnglat': [round(float(r[0]['lon']), 6), round(float(r[0]['lat']), 6)], 'name': r[0].get('display_name', ''), 'geom': r[0].get('geojson')} if r else {'q': q, 'lnglat': None}
     except Exception as e:
         out[key] = {'q': q, 'lnglat': None, 'error': str(e)}
     print(key, out[key].get('lnglat'))

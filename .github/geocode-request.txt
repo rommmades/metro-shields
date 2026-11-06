@@ -12,3 +12,7 @@ s852 | Тамбовская улица, 17
 s853 | улица Черняховского, 15
 x-tosina | улица Тосина, 1
 x-rasstannaya | Расстанная улица, 2
+st-parfenovskaya | Парфёновская улица
+st-zastavskaya | Заставская улица
+st-staroobryadcheskaya | Старообрядческая улица
+st-tashkentskaya | Ташкентская улица
